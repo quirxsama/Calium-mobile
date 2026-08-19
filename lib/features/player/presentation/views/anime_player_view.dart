@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:media_kit/media_kit.dart' hide PlayerState;
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -114,6 +115,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   String _currentStreamUrl = '';
   List<EpisodeEntity> _seasonEpisodes = [];
   bool _isDismissedNextEpPrompt = false;
+  int _initialSeekMs = 0;
 
   final List<StreamSubscription> _subscriptions = [];
 
@@ -123,6 +125,22 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     _currentSeasonNumber = widget.seasonNumber;
     _currentEpisodeNumber = widget.episodeNumber;
     _currentEpisodeTitle = widget.episodeTitle;
+
+    // Read saved progress from Hive
+    try {
+      final box = Hive.box('history');
+      final saved = box.get(widget.animeId);
+      if (saved is Map) {
+        final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
+        final epNum = int.tryParse(saved['episodeNumber']?.toString() ?? '');
+        if (sNum == _currentSeasonNumber && epNum == _currentEpisodeNumber) {
+          final posMs = saved['positionMs'] as int? ?? 0;
+          if (posMs > 3000) {
+            _initialSeekMs = posMs;
+          }
+        }
+      }
+    } catch (_) {}
 
     // Strict landscape orientation
     SystemChrome.setPreferredOrientations([
@@ -138,8 +156,8 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _player.stream.position.listen((pos) {
         _position = pos;
         _positionNotifier.value = pos;
-        // Save progress every 10s
-        if (pos.inSeconds > 0 && pos.inSeconds % 10 == 0) {
+        // Save progress every 5s
+        if (pos.inSeconds > 0 && pos.inSeconds % 5 == 0) {
           _saveCurrentProgress(pos);
         }
       }),
@@ -150,7 +168,12 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         if (mounted) setState(() => _buffer = buf);
       }),
       _player.stream.playing.listen((playing) {
-        if (mounted) setState(() => _isPlaying = playing);
+        if (mounted) {
+          setState(() => _isPlaying = playing);
+          if (!playing && _position.inSeconds > 0) {
+            _saveCurrentProgress(_position);
+          }
+        }
       }),
       _player.stream.buffering.listen((buffering) {
         if (mounted) setState(() => _isBuffering = buffering);
@@ -226,6 +249,9 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     await _player.open(media);
     if (lastPos.inSeconds > 5) {
       await _player.seek(lastPos);
+    } else if (_initialSeekMs > 3000) {
+      await _player.seek(Duration(milliseconds: _initialSeekMs));
+      _initialSeekMs = 0;
     }
 
     if (subtitle != null && subtitle.url.isNotEmpty) {
@@ -442,20 +468,52 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           }
 
           if (state is PlayerError) {
+            final isOffline = state.message.contains('SocketException') ||
+                state.message.contains('Failed host lookup') ||
+                state.message.contains('anizium') ||
+                state.message.contains('HandshakeException');
+            final cleanMessage = isOffline
+                ? 'İnternet bağlantısı yok veya bölüm kaynağına ulaşılamadı.\nÇevrimdışı izlemek için bölümü önceden indirmiş olmanız gerekir.'
+                : state.message;
             return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline_rounded,
-                      color: AppColors.accentCrimson, size: 48),
-                  const SizedBox(height: 12),
-                  Text(state.message, style: AppTypography.bodyMedium),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Geri Dön'),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.wifi_off_rounded,
+                        color: AppColors.accentCrimson, size: 48),
+                    const SizedBox(height: 12),
+                    Text('Video Yüklenemedi', style: AppTypography.headlineMedium.copyWith(fontSize: 18)),
+                    const SizedBox(height: 8),
+                    Text(
+                      cleanMessage,
+                      style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Geri Dön'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: () {
+                            context.read<PlayerCubit>().loadVideoSources(
+                                  animeId: widget.animeId,
+                                  season: _currentSeasonNumber,
+                                  episode: _currentEpisodeNumber,
+                                );
+                          },
+                          child: const Text('Tekrar Dene'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             );
           }

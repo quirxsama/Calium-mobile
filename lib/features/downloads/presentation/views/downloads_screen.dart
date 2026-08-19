@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -192,7 +193,9 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                                     child: SizedBox(
                                       width: 54,
                                       height: 76,
-                                      child: AppCachedImage(imageUrl: firstTask.posterUrl, fit: BoxFit.cover),
+                                      child: firstTask.localPosterPath.isNotEmpty && File(firstTask.localPosterPath).existsSync()
+                                          ? Image.file(File(firstTask.localPosterPath), fit: BoxFit.cover)
+                                          : AppCachedImage(imageUrl: firstTask.posterUrl, fit: BoxFit.cover),
                                     ),
                                   ),
                                   const SizedBox(width: AppSpacing.md),

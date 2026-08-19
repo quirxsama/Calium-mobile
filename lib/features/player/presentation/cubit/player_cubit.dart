@@ -94,7 +94,8 @@ class PlayerCubit extends Cubit<PlayerState> {
       final taskId = '${animeId}_s${season}_ep$episode';
       final tasks = DownloadService.instance.currentTasks;
       for (final t in tasks) {
-        if (t.id == taskId && t.status == DownloadStatus.completed && t.savePath.isNotEmpty) {
+        final matches = (t.id == taskId || (t.animeId == animeId && t.seasonNumber == season && t.episodeNumber == episode));
+        if (matches && t.status == DownloadStatus.completed && t.savePath.isNotEmpty && File(t.savePath).existsSync()) {
           targetPath = t.savePath;
           break;
         }
@@ -136,7 +137,20 @@ class PlayerCubit extends Cubit<PlayerState> {
     );
 
     result.fold(
-      (failure) => emit(PlayerError(message: failure.message)),
+      (failure) {
+        final msg = failure.message;
+        final isOffline = msg.contains('SocketException') ||
+            msg.contains('Failed host lookup') ||
+            msg.contains('anizium') ||
+            msg.contains('HandshakeException');
+        if (isOffline) {
+          emit(const PlayerError(
+            message: 'İnternet bağlantısı kurulamadı. Bu bölümü çevrimdışı izlemek için önceden indirmiş olmanız gerekir.',
+          ));
+        } else {
+          emit(PlayerError(message: failure.message));
+        }
+      },
       (data) {
         if (data.audioGroups.isEmpty) {
           emit(const PlayerError(message: 'Bu bölüm için video kaynağı bulunamadı.'));

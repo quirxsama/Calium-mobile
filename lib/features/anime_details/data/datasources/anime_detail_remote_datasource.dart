@@ -90,7 +90,34 @@ class AnimeDetailRemoteDataSourceImpl implements AnimeDetailRemoteDataSource {
 
   @override
   Future<List<AnimeModel>> getSimilarAnime(String animeId) async {
-    // 0. Try direct Anizium similar endpoint (most reliable, matches web)
+    // 1. Try Calium backend similar route first (uses asset proxy, proper posters, and caching)
+    try {
+      final response = await _dioClient.get(
+        '/api/anizium/anime/$animeId/similar',
+      );
+      final data = response.data;
+      List<AnimeModel> list = [];
+      if (data is Map<String, dynamic>) {
+        final pageData = data['page'] ?? data;
+        if (pageData is Map<String, dynamic> && pageData['data'] is List) {
+          list = (pageData['data'] as List)
+              .map((item) => AnimeModel.fromJson(item as Map<String, dynamic>))
+              .where((item) => item.id.isNotEmpty && item.id != animeId)
+              .toList();
+        } else if (data['data'] is List) {
+          list = (data['data'] as List)
+              .map((item) => AnimeModel.fromJson(item as Map<String, dynamic>))
+              .where((item) => item.id.isNotEmpty && item.id != animeId)
+              .toList();
+        }
+      }
+
+      if (list.isNotEmpty) {
+        return list;
+      }
+    } catch (_) {}
+
+    // 2. Direct Anizium API fallback
     try {
       final directDio = Dio(
         BaseOptions(
@@ -126,71 +153,27 @@ class AnimeDetailRemoteDataSourceImpl implements AnimeDetailRemoteDataSource {
       }
     } catch (_) {}
 
+    // 3. Fallback: If Anizium has no similar list, provide catalog recommendations
     try {
-      final response = await _dioClient.get(
-        '/api/anizium/anime/$animeId/similar',
+      final fallback = await _dioClient.get(
+        '/api/anizium/top',
+        queryParameters: {'page': 1},
       );
-      final data = response.data;
-      List<AnimeModel> list = [];
-      if (data is Map<String, dynamic>) {
-        final pageData = data['page'] ?? data;
+      final fbData = fallback.data;
+      if (fbData is Map<String, dynamic>) {
+        final pageData = fbData['page'] ?? fbData;
         if (pageData is Map<String, dynamic> && pageData['data'] is List) {
-          list = (pageData['data'] as List)
+          return (pageData['data'] as List)
               .map((item) => AnimeModel.fromJson(item as Map<String, dynamic>))
               .where((item) => item.id.isNotEmpty && item.id != animeId)
-              .toList();
-        } else if (data['data'] is List) {
-          list = (data['data'] as List)
-              .map((item) => AnimeModel.fromJson(item as Map<String, dynamic>))
-              .where((item) => item.id.isNotEmpty && item.id != animeId)
+              .take(12)
               .toList();
         }
       }
+    } catch (_) {}
 
-      if (list.isNotEmpty) {
-        return list;
-      }
-
-      // Fallback: If Anizium has no similar list for this anime, provide top catalog recommendations
-      try {
-        final fallback = await _dioClient.get(
-          '/api/anizium/top',
-          queryParameters: {'page': 1},
-        );
-        final fbData = fallback.data;
-        if (fbData is Map<String, dynamic>) {
-          final pageData = fbData['page'] ?? fbData;
-          if (pageData is Map<String, dynamic> && pageData['data'] is List) {
-            return (pageData['data'] as List)
-                .map((item) => AnimeModel.fromJson(item as Map<String, dynamic>))
-                .where((item) => item.id.isNotEmpty && item.id != animeId)
-                .take(15)
-                .toList();
-          }
-        }
-      } catch (_) {}
-
-      return [];
-    } catch (_) {
-      try {
-        final fallback = await _dioClient.get(
-          '/api/anizium/top',
-          queryParameters: {'page': 1},
-        );
-        final fbData = fallback.data;
-        if (fbData is Map<String, dynamic>) {
-          final pageData = fbData['page'] ?? fbData;
-          if (pageData is Map<String, dynamic> && pageData['data'] is List) {
-            return (pageData['data'] as List)
-                .map((item) => AnimeModel.fromJson(item as Map<String, dynamic>))
-                .where((item) => item.id.isNotEmpty && item.id != animeId)
-                .take(15)
-                .toList();
-          }
-        }
-      } catch (_) {}
-      return [];
-    }
+    return [];
   }
 }
+
 

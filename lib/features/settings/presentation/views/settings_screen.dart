@@ -29,7 +29,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isPrivate = false;
 
   String _defaultQuality = '1080p';
-  String _defaultAudio = 'Orijinal';
+  String _defaultAudio = 'Orijinal (Japonca)';
+  double _subtitleSize = 18.0;
+  bool _gestureBrightness = true;
+  bool _gestureVolume = true;
   bool _autoNext = true;
   bool _autoSkipIntro = false;
 
@@ -288,14 +291,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
-            children: ['1080p', '720p', '480p', '360p'].map((q) {
+            runSpacing: 8,
+            children: ['2160p (4K)', '1440p (2K)', '1080p', '720p', '480p', '360p'].map((q) {
               final isSel = _defaultQuality == q;
               return ChoiceChip(
                 label: Text(q),
                 selected: isSel,
                 selectedColor: AppColors.primary,
                 backgroundColor: AppColors.surfaceElevated,
-                labelStyle: TextStyle(color: isSel ? Colors.white : AppColors.textSecondary),
+                labelStyle: TextStyle(color: isSel ? Colors.black : AppColors.textSecondary, fontWeight: FontWeight.bold),
                 onSelected: (_) => setState(() => _defaultQuality = q),
               );
             }).toList(),
@@ -306,17 +310,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
-            children: ['Orijinal (Japonca)', 'Türkçe Dublaj'].map((a) {
+            runSpacing: 8,
+            children: ['Orijinal (Japonca)', 'Türkçe Dublaj', 'İngilizce Dublaj'].map((a) {
               final isSel = _defaultAudio == a;
               return ChoiceChip(
                 label: Text(a),
                 selected: isSel,
                 selectedColor: AppColors.primary,
                 backgroundColor: AppColors.surfaceElevated,
-                labelStyle: TextStyle(color: isSel ? Colors.white : AppColors.textSecondary),
+                labelStyle: TextStyle(color: isSel ? Colors.black : AppColors.textSecondary, fontWeight: FontWeight.bold),
                 onSelected: (_) => setState(() => _defaultAudio = a),
               );
             }).toList(),
+          ),
+          const Divider(color: AppColors.border, height: 32),
+
+          // Subtitle Size Setting
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Altyazı Boyutu', style: AppTypography.titleSmall),
+              Text('${_subtitleSize.toInt()} pt', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          Slider(
+            value: _subtitleSize,
+            min: 12.0,
+            max: 32.0,
+            divisions: 10,
+            activeColor: AppColors.primary,
+            inactiveColor: AppColors.surfaceElevated,
+            label: '${_subtitleSize.toInt()} pt',
+            onChanged: (val) => setState(() => _subtitleSize = val),
+          ),
+          const Divider(color: AppColors.border, height: 32),
+
+          // Gesture Controls
+          Text('Dokunmatik Kontroller', style: AppTypography.titleSmall),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Kaydırılabilir Parlaklık', style: TextStyle(color: Colors.white)),
+            subtitle: const Text('Ekranın sol tarafını yukarı/aşağı kaydırarak parlaklığı ayarla.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            value: _gestureBrightness,
+            activeThumbColor: AppColors.primary,
+            onChanged: (val) => setState(() => _gestureBrightness = val),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Kaydırılabilir Ses', style: TextStyle(color: Colors.white)),
+            subtitle: const Text('Ekranın sağ tarafını yukarı/aşağı kaydırarak sesi ayarla.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            value: _gestureVolume,
+            activeThumbColor: AppColors.primary,
+            onChanged: (val) => setState(() => _gestureVolume = val),
           ),
           const Divider(color: AppColors.border, height: 32),
 

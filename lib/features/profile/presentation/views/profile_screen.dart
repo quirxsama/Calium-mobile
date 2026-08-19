@@ -151,33 +151,33 @@ class _ProfileView extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            AppColors.primary.withAlpha(40),
+            AppColors.primary.withAlpha(50),
             AppColors.surfaceDark,
           ],
         ),
       ),
-      padding: const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 16),
+      padding: const EdgeInsets.only(top: 50, left: 16, right: 16, bottom: 16),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Avatar with Glowing Border
+          // Avatar with Glowing Gradient Ring
           Container(
-            padding: const EdgeInsets.all(3),
+            padding: const EdgeInsets.all(3.5),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: const LinearGradient(
-                colors: [AppColors.primary, AppColors.accentCrimson],
+                colors: [AppColors.primary, AppColors.accentCrimson, AppColors.primary],
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withAlpha(90),
-                  blurRadius: 16,
+                  color: AppColors.primary.withAlpha(120),
+                  blurRadius: 18,
                   spreadRadius: 2,
                 ),
               ],
             ),
             child: CircleAvatar(
-              radius: 40,
+              radius: 42,
               backgroundColor: AppColors.surfaceElevated,
               backgroundImage: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
                   ? NetworkImage(profile.avatarUrl!)
@@ -189,7 +189,7 @@ class _ProfileView extends StatelessWidget {
                           : 'U',
                       style: const TextStyle(
                         color: AppColors.primary,
-                        fontSize: 28,
+                        fontSize: 32,
                         fontWeight: FontWeight.bold,
                       ),
                     )
@@ -201,13 +201,14 @@ class _ProfileView extends StatelessWidget {
           // Display Name & Username
           Text(
             profile.displayName,
-            style: AppTypography.headlineMedium.copyWith(fontWeight: FontWeight.bold, fontSize: 20),
+            style: AppTypography.headlineMedium.copyWith(fontWeight: FontWeight.w800, fontSize: 20),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          const SizedBox(height: 2),
           Text(
             '@${profile.username}',
-            style: AppTypography.bodySmall.copyWith(color: AppColors.textMuted),
+            style: AppTypography.bodySmall.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600),
           ),
 
           if (profile.bio != null && profile.bio!.isNotEmpty) ...[
@@ -223,20 +224,24 @@ class _ProfileView extends StatelessWidget {
 
           const SizedBox(height: 14),
 
-          // Stats Chips Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              Flexible(child: _buildStatItem('Favori', profile.favoritesCount)),
-              _buildStatDivider(),
-              Flexible(child: _buildStatItem('Liste', profile.listsCount)),
-              _buildStatDivider(),
-              Flexible(child: _buildStatItem('Takipçi', profile.followersCount)),
-              _buildStatDivider(),
-              Flexible(child: _buildStatItem('Takip', profile.followingCount)),
-              _buildStatDivider(),
-              Flexible(child: _buildStatItem('Arkadaş', profile.friendsCount)),
-            ],
+          // Modern Glassmorphic Stats Row
+          GlassContainer(
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            borderRadius: 16.0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Flexible(child: _buildStatItem('Favori', profile.favoritesCount, Icons.favorite_rounded, AppColors.accentCrimson)),
+                _buildStatDivider(),
+                Flexible(child: _buildStatItem('Liste', profile.listsCount, Icons.playlist_play_rounded, AppColors.primary)),
+                _buildStatDivider(),
+                Flexible(child: _buildStatItem('Takipçi', profile.followersCount, Icons.people_alt_rounded, Colors.purpleAccent)),
+                _buildStatDivider(),
+                Flexible(child: _buildStatItem('Takip', profile.followingCount, Icons.person_add_alt_1_rounded, Colors.blueAccent)),
+                _buildStatDivider(),
+                Flexible(child: _buildStatItem('Arkadaş', profile.friendsCount, Icons.group_rounded, Colors.tealAccent)),
+              ],
+            ),
           ),
 
           if (!profile.isOwner) ...[
@@ -262,16 +267,18 @@ class _ProfileView extends StatelessWidget {
     );
   }
 
-  Widget _buildStatItem(String label, int value) {
+  Widget _buildStatItem(String label, int value, IconData icon, Color color) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(height: 3),
         Text(
           '$value',
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
-            fontSize: 16,
+            fontSize: 14,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -281,7 +288,8 @@ class _ProfileView extends StatelessWidget {
           label,
           style: const TextStyle(
             color: AppColors.textMuted,
-            fontSize: 11,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,

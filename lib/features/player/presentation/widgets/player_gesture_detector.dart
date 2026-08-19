@@ -93,17 +93,24 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
     }
   }
 
+  int _consecutiveLeftTaps = 0;
+  int _consecutiveRightTaps = 0;
+  DateTime? _lastLeftTapTime;
+  DateTime? _lastRightTapTime;
+  Timer? _singleTapTimer;
+
   @override
   void dispose() {
     _leftRippleTimer?.cancel();
     _rightRippleTimer?.cancel();
+    _singleTapTimer?.cancel();
     _dismissOverlayTimer?.cancel();
     super.dispose();
   }
 
   void _triggerLeftDoubleTap() {
     if (widget.isLocked) return;
-    HapticFeedback.lightImpact();
+    HapticFeedback.mediumImpact();
     _leftRippleTimer?.cancel();
     setState(() {
       _showLeftRipple = true;
@@ -111,11 +118,13 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
     });
     // Seek 10s delta per tap step
     widget.onDoubleTapLeft(10);
-    _leftRippleTimer = Timer(const Duration(milliseconds: 900), () {
+    _leftRippleTimer = Timer(const Duration(milliseconds: 750), () {
       if (mounted) {
         setState(() {
           _showLeftRipple = false;
           _leftSeekSeconds = 0;
+          _consecutiveLeftTaps = 0;
+          _lastLeftTapTime = null;
         });
       }
     });
@@ -123,7 +132,7 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
 
   void _triggerRightDoubleTap() {
     if (widget.isLocked) return;
-    HapticFeedback.lightImpact();
+    HapticFeedback.mediumImpact();
     _rightRippleTimer?.cancel();
     setState(() {
       _showRightRipple = true;
@@ -131,11 +140,13 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
     });
     // Seek 10s delta per tap step
     widget.onDoubleTapRight(10);
-    _rightRippleTimer = Timer(const Duration(milliseconds: 900), () {
+    _rightRippleTimer = Timer(const Duration(milliseconds: 750), () {
       if (mounted) {
         setState(() {
           _showRightRipple = false;
           _rightSeekSeconds = 0;
+          _consecutiveRightTaps = 0;
+          _lastRightTapTime = null;
         });
       }
     });
@@ -148,16 +159,44 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
     _skipNextTap = false;
     
     if (widget.isLocked) return;
+    final now = DateTime.now();
 
-    if (_showLeftRipple && _lastTapDownPosition.dx < screenWidth * 0.45) {
-      _triggerLeftDoubleTap();
-      _skipNextTap = true;
-      return;
+    // Check Left Zone (< 38% width)
+    if (_lastTapDownPosition.dx < screenWidth * 0.38) {
+      if (_showLeftRipple || (_lastLeftTapTime != null && now.difference(_lastLeftTapTime!).inMilliseconds < 450)) {
+        _singleTapTimer?.cancel();
+        _singleTapTimer = null;
+        _consecutiveLeftTaps++;
+        _triggerLeftDoubleTap();
+        _lastLeftTapTime = now;
+        _skipNextTap = true;
+        return;
+      } else {
+        _consecutiveLeftTaps = 1;
+        _lastLeftTapTime = now;
+      }
+    } else {
+      _consecutiveLeftTaps = 0;
+      _lastLeftTapTime = null;
     }
-    if (_showRightRipple && _lastTapDownPosition.dx > screenWidth * 0.55) {
-      _triggerRightDoubleTap();
-      _skipNextTap = true;
-      return;
+
+    // Check Right Zone (> 62% width)
+    if (_lastTapDownPosition.dx > screenWidth * 0.62) {
+      if (_showRightRipple || (_lastRightTapTime != null && now.difference(_lastRightTapTime!).inMilliseconds < 450)) {
+        _singleTapTimer?.cancel();
+        _singleTapTimer = null;
+        _consecutiveRightTaps++;
+        _triggerRightDoubleTap();
+        _lastRightTapTime = now;
+        _skipNextTap = true;
+        return;
+      } else {
+        _consecutiveRightTaps = 1;
+        _lastRightTapTime = now;
+      }
+    } else {
+      _consecutiveRightTaps = 0;
+      _lastRightTapTime = null;
     }
   }
 
@@ -166,11 +205,22 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
       widget.onTap();
       return;
     }
-    if (_skipNextTap) {
+    if (_skipNextTap || _showLeftRipple || _showRightRipple) {
       _skipNextTap = false;
       return;
     }
-    widget.onTap();
+
+    final isSideZone = _lastTapDownPosition.dx < screenWidth * 0.38 || _lastTapDownPosition.dx > screenWidth * 0.62;
+    if (isSideZone) {
+      _singleTapTimer?.cancel();
+      _singleTapTimer = Timer(const Duration(milliseconds: 250), () {
+        if (mounted && !_showLeftRipple && !_showRightRipple) {
+          widget.onTap();
+        }
+      });
+    } else {
+      widget.onTap();
+    }
   }
 
   void _onPanStart(DragStartDetails details, BoxConstraints constraints) {
@@ -266,11 +316,7 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
                 onDoubleTap: () {
                   if (widget.isLocked) return;
                   final x = _lastDoubleTapPosition.dx;
-                  if (x < screenWidth * 0.35) {
-                    _triggerLeftDoubleTap();
-                  } else if (x > screenWidth * 0.65) {
-                    _triggerRightDoubleTap();
-                  } else {
+                  if (x >= screenWidth * 0.38 && x <= screenWidth * 0.62) {
                     widget.onDoubleTapCenter();
                   }
                 },

@@ -78,6 +78,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // ── Title ─────────────────────────────────────
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          'assets/images/icon.png',
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
                       Text(
                         'CALIUM',
                         style: AppTypography.headlineLarge.copyWith(

@@ -23,6 +23,42 @@ class _CalendarScreenState extends State<CalendarScreen> {
     context.read<CalendarBloc>().add(LoadCalendarRequested());
   }
 
+  String _formatDayTabTitle(CalendarDayEntity day) {
+    for (final item in day.items) {
+      if (item.releaseDate != null) {
+        final dt = item.releaseDate!;
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final itemDay = DateTime(dt.year, dt.month, dt.day);
+        final diff = itemDay.difference(today).inDays;
+
+        const turkishMonths = [
+          '', 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+          'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+        ];
+        const turkishDays = [
+          '', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'
+        ];
+
+        final dayStr = turkishDays[dt.weekday];
+        final monthStr = turkishMonths[dt.month];
+
+        if (diff == 0) return 'Bugün (${dt.day} $monthStr)';
+        if (diff == 1) return 'Yarın (${dt.day} $monthStr)';
+        if (diff == -1) return 'Dün (${dt.day} $monthStr)';
+        return '${dt.day} $monthStr $dayStr';
+      }
+    }
+
+    final raw = day.dayName ?? day.title;
+    if (raw.toLowerCase().contains('upcoming_4k')) return 'Yaklaşan 4K';
+    if (raw.toLowerCase().contains('upcoming_trdub')) return 'Yaklaşan Dublaj';
+    if (raw.toLowerCase().contains('upcoming_movie')) return 'Yaklaşan Film';
+    if (raw.toLowerCase().contains('upcoming')) return 'Yaklaşan İçerik';
+
+    return raw;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -82,7 +118,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     unselectedLabelColor: AppColors.textSecondary,
                     labelStyle: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.bold),
                     tabs: state.days.map((d) {
-                      return Tab(text: d.dayName ?? d.title);
+                      return Tab(text: _formatDayTabTitle(d));
                     }).toList(),
                   ),
                   const SizedBox(height: AppSpacing.sm),

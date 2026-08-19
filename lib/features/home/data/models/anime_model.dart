@@ -18,9 +18,15 @@ class AnimeModel extends AnimeEntity {
   });
 
   factory AnimeModel.fromJson(Map<String, dynamic> json) {
+    final inner = (json['content'] is Map<String, dynamic>)
+        ? json['content'] as Map<String, dynamic>
+        : (json['anime'] is Map<String, dynamic>)
+            ? json['anime'] as Map<String, dynamic>
+            : json;
+
     // Handle rating parsing from num or string
     double? parsedRating;
-    final rawRating = json['imdb_point'] ?? json['rating'] ?? json['score'] ?? json['malRating'];
+    final rawRating = inner['imdb_point'] ?? inner['rating'] ?? inner['score'] ?? inner['malRating'] ?? json['imdb_point'] ?? json['rating'];
     if (rawRating != null) {
       if (rawRating is num) {
         parsedRating = rawRating.toDouble();
@@ -31,47 +37,59 @@ class AnimeModel extends AnimeEntity {
 
     // Handle genres parsing
     List<String> parsedGenres = [];
-    if (json['genre'] is List) {
-      parsedGenres = (json['genre'] as List).map((g) {
+    final rawGenres = inner['genre'] ?? inner['genres'] ?? json['genre'] ?? json['genres'];
+    if (rawGenres is List) {
+      parsedGenres = rawGenres.map((g) {
         if (g is Map) return (g['name'] ?? '').toString();
         return g.toString();
       }).where((g) => g.isNotEmpty).toList();
-    } else if (json['genres'] is List) {
-      parsedGenres = (json['genres'] as List).map((g) => g.toString()).toList();
     }
 
     // Handle poster URL
-    String poster = json['poster'] as String? ?? json['posterUrl'] as String? ?? json['image'] as String? ?? '';
+    String poster = inner['poster'] as String? ??
+        inner['posterUrl'] as String? ??
+        inner['cover'] as String? ??
+        inner['image'] as String? ??
+        inner['details_banner'] as String? ??
+        json['poster'] as String? ??
+        json['posterUrl'] as String? ??
+        json['cover'] as String? ??
+        json['image'] as String? ??
+        '';
     // Handle banner URL
-    String? banner = json['banner'] as String? ?? json['details_banner'] as String? ?? json['bannerUrl'] as String?;
+    String? banner = inner['banner'] as String? ?? inner['details_banner'] as String? ?? inner['bannerUrl'] as String? ?? json['banner'] as String?;
 
     // Handle episode / season info
     String? epBadge;
     int? sNum;
     int? epNum;
-    if (json['episode'] != null) {
-      final epVal = json['episode'].toString();
-      final seasonVal = json['season']?.toString() ?? '1';
+    final epSource = inner['episode'] ?? json['episode'];
+    if (epSource != null) {
+      final epVal = epSource.toString();
+      final seasonVal = (inner['season'] ?? json['season'])?.toString() ?? '1';
       epBadge = 'S$seasonVal:B$epVal';
       epNum = int.tryParse(epVal);
       sNum = int.tryParse(seasonVal);
-    } else if (json['currentEpisode'] != null) {
-      epBadge = json['currentEpisode'].toString();
+    } else if (inner['currentEpisode'] != null || json['currentEpisode'] != null) {
+      epBadge = (inner['currentEpisode'] ?? json['currentEpisode']).toString();
     }
 
+    final id = (inner['ID'] ?? inner['id'] ?? inner['_id'] ?? json['ID'] ?? json['id'] ?? json['_id'] ?? '').toString();
+    final title = inner['name'] as String? ?? inner['title'] as String? ?? json['name'] as String? ?? json['title'] as String? ?? '';
+
     return AnimeModel(
-      id: (json['ID'] ?? json['id'] ?? json['_id'] ?? '').toString(),
-      title: json['name'] as String? ?? json['title'] as String? ?? '',
+      id: id,
+      title: title,
       posterUrl: ImageUtils.cleanImageUrl(poster),
       bannerUrl: banner != null ? ImageUtils.cleanImageUrl(banner) : null,
       rating: parsedRating,
       currentEpisode: epBadge,
       genres: parsedGenres,
-      status: json['status'] as String?,
-      synopsis: json['overview'] as String? ?? json['synopsis'] as String?,
+      status: (inner['status'] ?? json['status']) as String?,
+      synopsis: (inner['overview'] ?? inner['synopsis'] ?? json['overview'] ?? json['synopsis']) as String?,
       seasonNumber: sNum,
       episodeNumber: epNum,
-      watchProgress: (json['watchProgress'] as num?)?.toDouble(),
+      watchProgress: ((inner['watchProgress'] ?? json['watchProgress']) as num?)?.toDouble(),
     );
   }
 

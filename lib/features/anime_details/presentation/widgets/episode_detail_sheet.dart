@@ -197,9 +197,13 @@ class EpisodeDetailSheet extends StatelessWidget {
             const SizedBox(height: 4),
             Row(
               children: [
-                Text(
-                  animeDetail.title,
-                  style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+                Flexible(
+                  child: Text(
+                    animeDetail.title,
+                    style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 if (episode.duration != null) ...[
                   Text(' • ', style: AppTypography.bodySmall.copyWith(color: AppColors.textMuted)),

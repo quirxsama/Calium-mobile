@@ -40,7 +40,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     CheckAuthRequested event,
     Emitter<AuthState> emit,
   ) async {
-    emit(AuthLoading());
+    if (state is! Authenticated) {
+      emit(AuthLoading());
+    }
     final result = await _getCurrentUserUseCase();
     result.fold(
       (_) => emit(Unauthenticated()),

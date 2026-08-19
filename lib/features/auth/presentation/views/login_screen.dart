@@ -73,6 +73,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // ── Logo & Title ──────────────────────────────
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          'assets/images/icon.png',
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
                       Text(
                         'CALIUM',
                         style: AppTypography.headlineLarge.copyWith(

@@ -298,15 +298,19 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
                           children: [
                             Row(
                               children: [
-                                Text(
-                                  EpisodeUtils.formatEpisodeLabel(
-                                    season: widget.selectedSeason,
-                                    episode: episode.episodeNumber,
-                                    title: episode.title,
-                                  ),
-                                  style: AppTypography.titleSmall.copyWith(
-                                    color: isCurrentPlaying ? AppColors.primary : AppColors.textPrimary,
-                                    fontWeight: FontWeight.w600,
+                                Expanded(
+                                  child: Text(
+                                    EpisodeUtils.formatEpisodeLabel(
+                                      season: widget.selectedSeason,
+                                      episode: episode.episodeNumber,
+                                      title: episode.title,
+                                    ),
+                                    style: AppTypography.titleSmall.copyWith(
+                                      color: isCurrentPlaying ? AppColors.primary : AppColors.textPrimary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 if (isCurrentPlaying) ...[

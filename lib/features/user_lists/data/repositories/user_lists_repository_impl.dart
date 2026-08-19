@@ -120,9 +120,9 @@ class UserListsRepositoryImpl implements UserListsRepository {
   }
 
   @override
-  Future<Either<Failure, bool>> toggleLikeList(String listId) async {
+  Future<Either<Failure, bool>> toggleLikeList(String listId, {bool? currentlyLiked}) async {
     try {
-      final res = await _remoteDataSource.toggleLikeList(listId);
+      final res = await _remoteDataSource.toggleLikeList(listId, currentlyLiked: currentlyLiked);
       return Right(res);
     } on ServerException catch (e) {
       return Left(ServerFailure(message: e.message));

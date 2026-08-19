@@ -75,7 +75,8 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                 color: _list!.isLiked ? AppColors.accentCrimson : Colors.white,
               ),
               onPressed: () {
-                context.read<UserListsBloc>().add(ToggleLikeListRequested(widget.listId));
+                final wasLiked = _list!.isLiked;
+                context.read<UserListsBloc>().add(ToggleLikeListRequested(widget.listId, currentlyLiked: wasLiked));
                 setState(() {
                   _list = UserListEntity(
                     id: _list!.id,

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:calium_stream/core/error/exceptions.dart';
 import 'package:calium_stream/core/network/dio_client.dart';
 import 'package:calium_stream/features/user_lists/data/models/user_list_model.dart';
@@ -21,7 +22,7 @@ abstract class UserListsRemoteDataSource {
     required String listId,
     required String animeId,
   });
-  Future<bool> toggleLikeList(String listId);
+  Future<bool> toggleLikeList(String listId, {bool? currentlyLiked});
 }
 
 class UserListsRemoteDataSourceImpl implements UserListsRemoteDataSource {
@@ -144,14 +145,19 @@ class UserListsRemoteDataSourceImpl implements UserListsRemoteDataSource {
   }
 
   @override
-  Future<bool> toggleLikeList(String listId) async {
+  Future<bool> toggleLikeList(String listId, {bool? currentlyLiked}) async {
     try {
-      final response = await _dioClient.post<Map<String, dynamic>>('/api/lists/$listId/like');
+      final Response<Map<String, dynamic>> response;
+      if (currentlyLiked == true) {
+        response = await _dioClient.delete<Map<String, dynamic>>('/api/lists/$listId/like');
+      } else {
+        response = await _dioClient.post<Map<String, dynamic>>('/api/lists/$listId/like');
+      }
       final data = response.data;
-      if (data != null) {
+      if (data != null && data['liked'] != null) {
         return data['liked'] == true;
       }
-      return false;
+      return currentlyLiked != true;
     } catch (e) {
       if (e is ServerException) rethrow;
       throw ServerException(message: e.toString());

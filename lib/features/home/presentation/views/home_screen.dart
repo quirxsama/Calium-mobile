@@ -71,20 +71,16 @@ class HomeScreen extends StatelessWidget {
                             // Logo
                             Row(
                               children: [
-                                Container(
-                                  width: 28,
-                                  height: 28,
-                                  margin: const EdgeInsets.only(right: 8),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [AppColors.primary, AppColors.accentCrimson],
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Center(
-                                    child: Icon(Icons.play_arrow_rounded, color: Colors.black, size: 20),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.asset(
+                                    'assets/images/icon.png',
+                                    width: 32,
+                                    height: 32,
+                                    fit: BoxFit.cover,
                                   ),
                                 ),
+                                const SizedBox(width: 8),
                                 Text(
                                   'CALIUM',
                                   style: AppTypography.headlineLarge.copyWith(

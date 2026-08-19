@@ -20,6 +20,7 @@ class DownloadTaskEntity extends Equatable {
     required this.seasonNumber,
     required this.posterUrl,
     required this.downloadUrl,
+    this.localPosterPath = '',
     this.quality,
     this.audioName,
     this.savePath = '',
@@ -37,6 +38,7 @@ class DownloadTaskEntity extends Equatable {
   final int episodeNumber;
   final int seasonNumber;
   final String posterUrl;
+  final String localPosterPath;
   final String downloadUrl;
   final String? quality;
   final String? audioName;
@@ -49,6 +51,7 @@ class DownloadTaskEntity extends Equatable {
 
   DownloadTaskEntity copyWith({
     String? downloadUrl,
+    String? localPosterPath,
     String? quality,
     String? audioName,
     String? savePath,
@@ -66,6 +69,7 @@ class DownloadTaskEntity extends Equatable {
       episodeNumber: episodeNumber,
       seasonNumber: seasonNumber,
       posterUrl: posterUrl,
+      localPosterPath: localPosterPath ?? this.localPosterPath,
       downloadUrl: downloadUrl ?? this.downloadUrl,
       quality: quality ?? this.quality,
       audioName: audioName ?? this.audioName,
@@ -86,6 +90,7 @@ class DownloadTaskEntity extends Equatable {
     'episodeNumber': episodeNumber,
     'seasonNumber': seasonNumber,
     'posterUrl': posterUrl,
+    'localPosterPath': localPosterPath,
     'downloadUrl': downloadUrl,
     'quality': quality,
     'audioName': audioName,
@@ -105,6 +110,7 @@ class DownloadTaskEntity extends Equatable {
       episodeNumber: map['episodeNumber'] as int,
       seasonNumber: map['seasonNumber'] as int,
       posterUrl: map['posterUrl'] as String? ?? '',
+      localPosterPath: map['localPosterPath'] as String? ?? '',
       downloadUrl: map['downloadUrl'] as String? ?? '',
       quality: map['quality'] as String?,
       audioName: map['audioName'] as String?,
@@ -119,7 +125,7 @@ class DownloadTaskEntity extends Equatable {
   @override
   List<Object?> get props => [
         id, animeId, animeTitle, episodeTitle, episodeNumber,
-        seasonNumber, posterUrl, downloadUrl, quality, audioName, savePath,
+        seasonNumber, posterUrl, localPosterPath, downloadUrl, quality, audioName, savePath,
         progress, receivedBytes, totalBytes, status, speedBytesPerSec,
       ];
 }
@@ -275,22 +281,46 @@ class DownloadService {
       return;
     }
 
-    // Step 2: Determine save path
+    // Step 2: Determine save path & local poster path
     String savePath = task.savePath;
-    if (savePath.isEmpty) {
-      try {
-        final dir = await getApplicationDocumentsDirectory();
-        final downloadDir = Directory('${dir.path}/downloads');
-        if (!await downloadDir.exists()) {
-          await downloadDir.create(recursive: true);
-        }
-        savePath = '${downloadDir.path}/${task.id}.mp4';
-      } catch (e) {
-        debugPrint('⚠️ Failed to get save directory: $e');
-        _updateTask(index, status: DownloadStatus.failed);
-        _processQueue();
-        return;
+    String localPosterPath = task.localPosterPath;
+
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final downloadDir = Directory('${dir.path}/downloads');
+      if (!await downloadDir.exists()) {
+        await downloadDir.create(recursive: true);
       }
+      if (savePath.isEmpty) {
+        savePath = '${downloadDir.path}/${task.id}.mp4';
+      }
+
+      // Pre-cache episode poster thumbnail locally for guaranteed offline viewing
+      if (localPosterPath.isEmpty || !File(localPosterPath).existsSync()) {
+        final thumbDir = Directory('${downloadDir.path}/thumbnails');
+        if (!await thumbDir.exists()) {
+          await thumbDir.create(recursive: true);
+        }
+        final safeAnimeId = task.animeId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+        final targetThumbPath = '${thumbDir.path}/${safeAnimeId}_poster.jpg';
+        if (task.posterUrl.isNotEmpty) {
+          try {
+            final posterUrl = task.posterUrl.startsWith('http')
+                ? task.posterUrl
+                : 'https://calium.fun${task.posterUrl}';
+            await _dio.download(posterUrl, targetThumbPath);
+            localPosterPath = targetThumbPath;
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ Failed to setup download directory: $e');
+    }
+
+    if (savePath.isEmpty) {
+      _updateTask(index, status: DownloadStatus.failed);
+      _processQueue();
+      return;
     }
 
     // Step 3: Start download
@@ -303,6 +333,7 @@ class DownloadService {
       quality: resolvedQuality,
       audioName: resolvedAudio,
       savePath: savePath,
+      localPosterPath: localPosterPath,
     );
 
     int lastReceivedBytes = 0;
@@ -369,6 +400,7 @@ class DownloadService {
     DownloadStatus? status,
     double? progress,
     String? downloadUrl,
+    String? localPosterPath,
     String? quality,
     String? audioName,
     String? savePath,
@@ -378,6 +410,7 @@ class DownloadService {
       status: status,
       progress: progress,
       downloadUrl: downloadUrl,
+      localPosterPath: localPosterPath,
       quality: quality,
       audioName: audioName,
       savePath: savePath,

@@ -59,12 +59,13 @@ final class RemoveAnimeFromListRequested extends UserListsEvent {
 }
 
 final class ToggleLikeListRequested extends UserListsEvent {
-  const ToggleLikeListRequested(this.listId);
+  const ToggleLikeListRequested(this.listId, {this.currentlyLiked});
 
   final String listId;
+  final bool? currentlyLiked;
 
   @override
-  List<Object?> get props => [listId];
+  List<Object?> get props => [listId, currentlyLiked];
 }
 
 // ─── States ──────────────────────────────────────────────────
@@ -176,7 +177,7 @@ class UserListsBloc extends Bloc<UserListsEvent, UserListsState> {
     ToggleLikeListRequested event,
     Emitter<UserListsState> emit,
   ) async {
-    await _repository.toggleLikeList(event.listId);
+    await _repository.toggleLikeList(event.listId, currentlyLiked: event.currentlyLiked);
     add(LoadUserListsRequested());
   }
 }

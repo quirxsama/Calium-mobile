@@ -33,6 +33,25 @@ class CalendarItemModel extends CalendarItemEntity {
         content['banner'] as String? ??
         '';
 
+    final rawCat = json['category'] is List 
+        ? (json['category'] as List).join(', ')
+        : json['category']?.toString();
+
+    String? formattedCategory;
+    if (rawCat != null && rawCat.isNotEmpty) {
+      if (rawCat.contains('upcoming_4k')) {
+        formattedCategory = 'Yaklaşan 4K';
+      } else if (rawCat.contains('upcoming_trdub')) {
+        formattedCategory = 'Yaklaşan Dublaj';
+      } else if (rawCat.contains('upcoming_movie')) {
+        formattedCategory = 'Yaklaşan Film';
+      } else if (rawCat.contains('upcoming')) {
+        formattedCategory = 'Yaklaşan İçerik';
+      } else {
+        formattedCategory = rawCat;
+      }
+    }
+
     return CalendarItemModel(
       id: (json['_id'] ?? json['ID'] ?? '').toString(),
       animeId: (json['content_id'] ?? json['ID'] ?? content['ID'] ?? '').toString(),
@@ -41,9 +60,7 @@ class CalendarItemModel extends CalendarItemEntity {
       seasonNumber: int.tryParse(json['season']?.toString() ?? ''),
       episodeNumber: int.tryParse(json['episode']?.toString() ?? ''),
       releaseDate: parsedDate,
-      category: json['category'] is List 
-          ? (json['category'] as List).join(', ')
-          : json['category']?.toString(),
+      category: formattedCategory,
       isOnAir: json['on_air'] == true || json['active'] == true,
     );
   }

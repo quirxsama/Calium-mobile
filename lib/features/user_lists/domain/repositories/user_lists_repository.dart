@@ -21,5 +21,5 @@ abstract class UserListsRepository {
     required String listId,
     required String animeId,
   });
-  Future<Either<Failure, bool>> toggleLikeList(String listId);
+  Future<Either<Failure, bool>> toggleLikeList(String listId, {bool? currentlyLiked});
 }

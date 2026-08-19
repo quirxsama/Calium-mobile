@@ -60,6 +60,8 @@ class AuthInterceptor extends Interceptor {
         options.uri.host.contains('calium.fun');
 
     if (isCaliumEndpoint) {
+      options.headers['origin'] = ApiConstants.caliumBackendUrl;
+      options.headers['referer'] = '${ApiConstants.caliumBackendUrl}/';
       final token = await _secureStorage.read(key: StorageKeys.authToken);
       if (token != null && token.isNotEmpty) {
         options.headers['Authorization'] = 'Bearer $token';
