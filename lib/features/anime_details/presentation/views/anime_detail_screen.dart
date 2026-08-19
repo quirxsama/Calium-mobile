@@ -1,0 +1,585 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:get_it/get_it.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:go_router/go_router.dart';
+
+import 'package:calium_stream/core/theme/app_colors.dart';
+import 'package:calium_stream/core/theme/app_spacing.dart';
+import 'package:calium_stream/core/theme/app_typography.dart';
+import 'package:calium_stream/core/widgets/anime_poster_card.dart';
+import 'package:calium_stream/core/widgets/app_cached_image.dart';
+import 'package:calium_stream/core/widgets/glass_container.dart';
+import 'package:calium_stream/core/widgets/shimmer_placeholder.dart';
+import 'package:calium_stream/features/anime_details/domain/repositories/anime_detail_repository.dart';
+import 'package:calium_stream/features/anime_details/domain/usecases/get_anime_detail_usecase.dart';
+import 'package:calium_stream/features/anime_details/domain/usecases/get_cast_usecase.dart';
+import 'package:calium_stream/features/anime_details/presentation/bloc/anime_detail_bloc.dart';
+import 'package:calium_stream/features/anime_details/presentation/widgets/cast_carousel.dart';
+import 'package:calium_stream/features/anime_details/presentation/widgets/episode_detail_sheet.dart';
+import 'package:calium_stream/features/anime_details/presentation/widgets/episode_list_widget.dart';
+import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
+import 'package:calium_stream/features/library/domain/entities/favorite_entity.dart';
+import 'package:calium_stream/features/library/presentation/bloc/library_bloc.dart';
+import 'package:calium_stream/features/user_lists/presentation/widgets/add_to_list_bottom_sheet.dart';
+
+
+class AnimeDetailScreen extends StatelessWidget {
+  const AnimeDetailScreen({
+    required this.animeId,
+    super.key,
+  });
+
+  final String animeId;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => AnimeDetailBloc(
+        getAnimeDetailUseCase: GetIt.I<GetAnimeDetailUseCase>(),
+        getCastUseCase: GetIt.I<GetCastUseCase>(),
+        repository: GetIt.I<AnimeDetailRepository>(),
+      )..add(LoadAnimeDetailRequested(animeId: animeId)),
+      child: const _AnimeDetailView(),
+    );
+  }
+}
+
+class _AnimeDetailView extends StatefulWidget {
+  const _AnimeDetailView();
+
+  @override
+  State<_AnimeDetailView> createState() => _AnimeDetailViewState();
+}
+
+class _AnimeDetailViewState extends State<_AnimeDetailView> {
+  bool _isSynopsisExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: BlocBuilder<AnimeDetailBloc, AnimeDetailState>(
+        builder: (context, state) {
+          if (state is AnimeDetailLoading || state is AnimeDetailInitial) {
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            );
+          }
+
+          if (state is AnimeDetailFailureState) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: AppColors.accentCrimson,
+                    size: 48,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(state.message, style: AppTypography.bodyMedium),
+                  const SizedBox(height: AppSpacing.md),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Geri Dön'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          if (state is AnimeDetailLoaded) {
+            final detail = state.detail;
+            final bannerImage = detail.bannerUrl ?? detail.posterUrl;
+
+            return CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                // ── Hero Banner Header ──────────────────────────────
+                SliverAppBar(
+                  expandedHeight: 340,
+                  pinned: true,
+                  backgroundColor: AppColors.background,
+                  elevation: 0,
+                  leading: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: GlassContainer(
+                      borderRadius: 12,
+                      padding: EdgeInsets.zero,
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                  ),
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        // Background banner
+                        AppCachedImage(
+                          imageUrl: bannerImage,
+                          fit: BoxFit.cover,
+                        ),
+
+                        // Gradient Scrim
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                AppColors.background.withAlpha(160),
+                                AppColors.background,
+                              ],
+                              stops: const [0.2, 0.7, 1.0],
+                            ),
+                          ),
+                        ),
+
+                        // Poster & Title Info at bottom of header
+                        Positioned(
+                          left: AppSpacing.screenPadding,
+                          right: AppSpacing.screenPadding,
+                          bottom: AppSpacing.lg,
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              // Hero Poster
+                              Hero(
+                                tag: 'anime-poster-${detail.id}',
+                                child: AppCachedImage(
+                                  imageUrl: detail.posterUrl,
+                                  width: 100,
+                                  height: 140,
+                                  fit: BoxFit.cover,
+                                  borderRadius: BorderRadius.circular(
+                                    AppSpacing.borderRadiusMd,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.lg),
+
+                              // Info Column
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (detail.rating != null)
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.star_rounded,
+                                            color: AppColors.ratingAmber,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            detail.rating!.toStringAsFixed(1),
+                                            style: AppTypography.titleSmall
+                                                .copyWith(
+                                              color: AppColors.ratingAmber,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          if (detail.year != null) ...[
+                                            Text(
+                                              ' • ${detail.year}',
+                                              style: AppTypography.bodySmall,
+                                            ),
+                                          ],
+                                          if (detail.status != null) ...[
+                                            Text(
+                                              ' • ${detail.status}',
+                                              style: AppTypography.bodySmall,
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    const SizedBox(height: AppSpacing.xs),
+                                    Text(
+                                      detail.title,
+                                      style:
+                                          AppTypography.headlineMedium.copyWith(
+                                        color: Colors.white,
+                                        fontSize: 20,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (detail.originalTitle != null) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        detail.originalTitle!,
+                                        style: AppTypography.bodySmall.copyWith(
+                                          color: AppColors.textMuted,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // ── Quick Action Dock ───────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.screenPadding,
+                      vertical: AppSpacing.md,
+                    ),
+                    child: Row(
+                      children: [
+                        // Play Button
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              if (state.episodes.isNotEmpty) {
+                                final firstEp = state.episodes.first;
+                                context.push(
+                                  '/watch/${detail.id}?url=&title=${Uri.encodeComponent(detail.title)}&episode=${Uri.encodeComponent(firstEp.title ?? 'Bölüm 1')}&ep=${firstEp.episodeNumber}&s=${state.selectedSeason}',
+                                );
+                              }
+                            },
+                            icon: const Icon(
+                              Icons.play_arrow_rounded,
+                              size: 24,
+                            ),
+                            label: const Text('İzle'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.borderRadiusMd,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+
+                        // Favorite Button
+                        IconButton.filled(
+                          onPressed: () {
+                            context.read<LibraryBloc>().add(
+                                  ToggleFavoriteRequested(
+                                    favorite: FavoriteEntity(
+                                      animeId: detail.id,
+                                      name: detail.title,
+                                      posterUrl: detail.posterUrl,
+                                      addedAt: DateTime.now(),
+                                    ),
+                                  ),
+                                );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Listeye eklendi'),
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.bookmark_border_rounded),
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.surfaceElevated,
+                            foregroundColor: AppColors.textPrimary,
+                            padding: const EdgeInsets.all(14),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+
+                        // Custom List Button
+                        IconButton.filled(
+                          tooltip: 'Özel Listeye Ekle',
+                          onPressed: () {
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: Colors.transparent,
+                              isScrollControlled: true,
+                              builder: (_) => AddToListBottomSheet(
+                                animeId: detail.id,
+                                animeName: detail.title,
+                                poster: detail.posterUrl,
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.playlist_add_rounded),
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.surfaceElevated,
+                            foregroundColor: AppColors.textPrimary,
+                            padding: const EdgeInsets.all(14),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+
+                        // Download Episode Button
+                        IconButton.filled(
+                          tooltip: 'Bölümü İndir',
+                          onPressed: () {
+                            if (state.episodes.isNotEmpty) {
+                              final firstEp = state.episodes.first;
+                              DownloadService.instance.addTask(
+                                animeId: detail.id,
+                                animeTitle: detail.title,
+                                episodeTitle: firstEp.title ?? 'Bölüm ${firstEp.episodeNumber}',
+                                episodeNumber: firstEp.episodeNumber,
+                                seasonNumber: state.selectedSeason,
+                                posterUrl: detail.posterUrl,
+                                downloadUrl: '',
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Bölüm indirme kuyruğuna eklendi'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.download_for_offline_outlined),
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.surfaceElevated,
+                            foregroundColor: AppColors.textPrimary,
+                            padding: const EdgeInsets.all(14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // ── Genres Chips ────────────────────────────────────
+                if (detail.genres.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.screenPadding,
+                      ),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: detail.genres.map((genre) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: AppColors.border,
+                                width: 0.8,
+                              ),
+                            ),
+                            child: Text(
+                              genre,
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 12,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.lg),
+                ),
+
+                // ── Expandable Synopsis ─────────────────────────────
+                if (detail.synopsis.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.screenPadding,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Özet', style: AppTypography.titleMedium),
+                          const SizedBox(height: AppSpacing.xs),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isSynopsisExpanded = !_isSynopsisExpanded;
+                              });
+                            },
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  detail.synopsis,
+                                  style: AppTypography.bodyMedium,
+                                  maxLines: _isSynopsisExpanded ? null : 3,
+                                  overflow: _isSynopsisExpanded
+                                      ? TextOverflow.visible
+                                      : TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _isSynopsisExpanded
+                                      ? 'Daha Az Göster'
+                                      : 'Devamını Oku',
+                                  style: AppTypography.bodySmall.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.xl),
+                ),
+
+                // ── Cast Carousel ───────────────────────────────────
+                if (state.cast.isNotEmpty) ...[
+                  SliverToBoxAdapter(
+                    child: CastCarousel(cast: state.cast),
+                  ),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: AppSpacing.xl),
+                  ),
+                ],
+
+                // ── Episodes Header ─────────────────────────────────
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.screenPadding,
+                    ),
+                    child: Text(
+                      'Bölümler',
+                      style: AppTypography.headlineMedium.copyWith(
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: AppSpacing.md),
+                ),
+
+                // ── Episode List Widget ─────────────────────────────
+                SliverToBoxAdapter(
+                  child: EpisodeListWidget(
+                    animeId: detail.id,
+                    seasons: detail.seasons,
+                    episodes: state.episodes,
+                    selectedSeason: state.selectedSeason,
+                    onSeasonChanged: (season) {
+                      context.read<AnimeDetailBloc>().add(
+                            SeasonChangedEvent(
+                              animeId: detail.id,
+                              seasonNumber: season,
+                            ),
+                          );
+                    },
+                    onEpisodeTap: (episode) {
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: Colors.transparent,
+                        isScrollControlled: true,
+                        builder: (_) => EpisodeDetailSheet(
+                          animeDetail: detail,
+                          episode: episode,
+                          seasonNumber: state.selectedSeason,
+                        ),
+                      );
+                    },
+                    onDirectPlay: (episode) {
+                      context.push(
+                        '/watch/${detail.id}?url=&title=${Uri.encodeComponent(detail.title)}&episode=${Uri.encodeComponent(episode.title ?? 'Bölüm ${episode.episodeNumber}')}&ep=${episode.episodeNumber}&s=${state.selectedSeason}',
+                      );
+                    },
+                  ),
+                ),
+
+
+                // ── Similar Anime Rail ──────────────────────────────
+                if (state.similarAnime.isNotEmpty) ...[
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: AppSpacing.xl),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.screenPadding,
+                          ),
+                          child: Text(
+                            'Benzer Animeler',
+                            style: AppTypography.headlineMedium.copyWith(
+                              fontSize: 18,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        SizedBox(
+                          height: 220,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.screenPadding,
+                            ),
+                            scrollDirection: Axis.horizontal,
+                            itemCount: state.similarAnime.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: AppSpacing.md),
+                            itemBuilder: (context, index) {
+                              final anime = state.similarAnime[index];
+                              return AnimePosterCard(
+                                id: anime.id,
+                                title: anime.title,
+                                posterUrl: anime.posterUrl,
+                                rating: anime.rating,
+                                onTap: () => context.push('/anime/${anime.id}'),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: 60),
+                ),
+              ],
+            );
+          }
+
+          return const SizedBox.shrink();
+        },
+      ),
+    );
+  }
+}

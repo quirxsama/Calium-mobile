@@ -1,0 +1,63 @@
+name: calium_stream
+description: "High-performance cross-platform anime streaming client."
+publish_to: 'none'
+version: 1.0.0-beta.1+1
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Architecture & State Management
+  flutter_bloc: ^8.1.5
+  bloc: ^8.1.4
+  equatable: ^2.0.5
+  get_it: ^7.6.7
+  injectable: ^2.4.1
+
+  # Routing & Navigation
+  go_router: ^14.0.1
+
+  # High-Performance Video Player (libmpv engine)
+  media_kit: ^1.1.10+1
+  media_kit_video: ^1.2.4
+  media_kit_libs_video: ^1.0.4
+
+  # Networking & Caching
+  dio: ^5.4.2+1
+  dio_cache_interceptor: ^3.5.0
+  dio_cache_interceptor_hive_store: ^3.2.2
+
+  # Offline Storage
+  hive_flutter: ^1.1.0
+  flutter_secure_storage: ^9.0.0
+
+  # UI, Animation & Rendering
+  cached_network_image: ^3.3.1
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.0
+  shimmer: ^3.0.0
+  carousel_slider: ^5.0.0
+  palette_generator: ^0.3.3+4
+
+  # Utilities
+  image_picker: ^1.1.2
+  dartz: ^0.10.1
+  cupertino_icons: ^1.0.8
+  flutter_dotenv: ^5.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.9
+  injectable_generator: ^2.6.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+    - assets/icons/
+    - assets/images/
