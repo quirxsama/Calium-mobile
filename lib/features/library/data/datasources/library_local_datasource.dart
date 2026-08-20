@@ -99,12 +99,8 @@ class LibraryLocalDataSourceImpl implements LibraryLocalDataSource {
         if (localUpdated > 0 && incoming < localUpdated) continue;
       }
       final json = h.toJson();
-      // Preserve precise resume position that cloud data doesn't carry
-      if (existing is Map && existing['positionMs'] != null) {
-        json['positionMs'] = existing['positionMs'];
-      }
-      // Preserve episode thumbnail captured during local playback
-      if (existing is Map && existing['episodeThumb'] != null) {
+      // Preserve episode thumbnail captured during local playback if incoming is empty
+      if (existing is Map && existing['episodeThumb'] != null && (json['episodeThumb'] == null || (json['episodeThumb'] as String).isEmpty)) {
         json['episodeThumb'] = existing['episodeThumb'];
       }
       await _histBox.put(h.animeId, json);

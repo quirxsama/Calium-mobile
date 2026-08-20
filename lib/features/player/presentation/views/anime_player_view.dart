@@ -8,6 +8,7 @@ import 'package:media_kit/media_kit.dart' hide PlayerState;
 import 'package:media_kit_video/media_kit_video.dart';
 
 import 'package:calium_stream/core/constants/api_constants.dart';
+import 'package:calium_stream/core/services/sync_service.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
@@ -122,6 +123,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   List<EpisodeEntity> _seasonEpisodes = [];
   bool _isDismissedNextEpPrompt = false;
   int _initialSeekMs = 0;
+  double _savedProgressRatio = 0.0;
   Duration? _initialResumeTarget;
   Timer? _resumeSafetyTimer;
   bool _introSkipped = false;
@@ -156,14 +158,35 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           if (_currentEpisodeId.isEmpty && savedEpId.isNotEmpty && !savedEpId.contains('_')) {
             _currentEpisodeId = savedEpId;
           }
-          var posMs = (saved['positionMs'] as num?)?.toInt() ?? 0;
-          if (posMs <= 0) {
-            final progress = (saved['progress'] as num?)?.toDouble() ?? 0.0;
-            final durationSec = (saved['duration'] as num?)?.toInt() ?? 0;
-            if (progress > 0 && durationSec > 0) {
-              posMs = (progress * durationSec * 1000).round();
+
+          var posMs = 0;
+          final rawPos = saved['positionMs'] ?? saved['position_ms'];
+          if (rawPos is num && rawPos > 0) {
+            posMs = rawPos.toInt();
+          } else {
+            final rawSec = saved['currentTime'] ??
+                saved['current_time'] ??
+                saved['time'] ??
+                saved['position'] ??
+                saved['watchedTime'] ??
+                saved['watched_time'];
+            if (rawSec is num && rawSec > 0) {
+              posMs = rawSec > 100000 ? rawSec.toInt() : (rawSec * 1000).round();
             }
           }
+
+          final durationSec = (saved['duration'] as num?)?.toInt() ?? 0;
+          final rawProg = (saved['progress'] as num?)?.toDouble() ?? 0.0;
+          final progress = rawProg > 1.0 ? rawProg / 100.0 : rawProg;
+
+          if (posMs <= 0 && progress > 0 && durationSec > 0) {
+            posMs = (progress * durationSec * 1000).round();
+          }
+
+          if (progress > 0) {
+            _savedProgressRatio = progress;
+          }
+
           if (posMs > 3000) {
             _initialSeekMs = posMs;
             _initialResumeTarget = Duration(milliseconds: posMs);
@@ -219,6 +242,21 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
             if (clamped > Duration.zero) {
               _player.seek(clamped);
             }
+          }
+        } else if (_initialResumeTarget == null &&
+            _position.inSeconds < 4 &&
+            _savedProgressRatio > 0 &&
+            _savedProgressRatio < 0.95 &&
+            dur > Duration.zero) {
+          final target = Duration(
+            milliseconds: (_savedProgressRatio * dur.inMilliseconds).round(),
+          );
+          if (target.inSeconds > 3) {
+            _initialResumeTarget = target;
+            _player.seek(target);
+            _resumeSafetyTimer = Timer(const Duration(seconds: 10), () {
+              _initialResumeTarget = null;
+            });
           }
         }
       }),
@@ -418,6 +456,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     _autoNextTimer = null;
 
     int savedSeekMs = 0;
+    double savedProgress = 0.0;
     String targetEpId = (episodeId != null && episodeId.isNotEmpty && !episodeId.contains('_'))
         ? episodeId
         : '';
@@ -435,14 +474,34 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
               targetEpId = sId;
             }
           }
-          var posMs = (saved['positionMs'] as num?)?.toInt() ?? 0;
-          if (posMs <= 0) {
-            final progress = (saved['progress'] as num?)?.toDouble() ?? 0.0;
-            final durationSec = (saved['duration'] as num?)?.toInt() ?? 0;
-            if (progress > 0 && durationSec > 0) {
-              posMs = (progress * durationSec * 1000).round();
+          var posMs = 0;
+          final rawPos = saved['positionMs'] ?? saved['position_ms'];
+          if (rawPos is num && rawPos > 0) {
+            posMs = rawPos.toInt();
+          } else {
+            final rawSec = saved['currentTime'] ??
+                saved['current_time'] ??
+                saved['time'] ??
+                saved['position'] ??
+                saved['watchedTime'] ??
+                saved['watched_time'];
+            if (rawSec is num && rawSec > 0) {
+              posMs = rawSec > 100000 ? rawSec.toInt() : (rawSec * 1000).round();
             }
           }
+
+          final durationSec = (saved['duration'] as num?)?.toInt() ?? 0;
+          final rawProg = (saved['progress'] as num?)?.toDouble() ?? 0.0;
+          final progress = rawProg > 1.0 ? rawProg / 100.0 : rawProg;
+
+          if (posMs <= 0 && progress > 0 && durationSec > 0) {
+            posMs = (progress * durationSec * 1000).round();
+          }
+
+          if (progress > 0) {
+            savedProgress = progress;
+          }
+
           if (posMs > 3000) {
             savedSeekMs = posMs;
           }
@@ -473,6 +532,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _isDismissedNextEpPrompt = false;
       _showControls = true;
       _initialSeekMs = savedSeekMs;
+      _savedProgressRatio = savedProgress;
       _initialResumeTarget = savedSeekMs > 3000 ? Duration(milliseconds: savedSeekMs) : null;
       _introSkipped = false;
     });
@@ -593,6 +653,9 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   @override
   void dispose() {
     _saveCurrentProgress(_position);
+    try {
+      GetIt.I<SyncService>().syncNow();
+    } catch (_) {}
     _controlsTimer?.cancel();
     _autoNextTimer?.cancel();
     for (final s in _subscriptions) {
@@ -617,6 +680,9 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         onPopInvokedWithResult: (didPop, result) async {
           await _player.stop();
           _saveCurrentProgress(_position);
+          try {
+            GetIt.I<SyncService>().syncNow();
+          } catch (_) {}
           await SystemChrome.setPreferredOrientations([
             DeviceOrientation.portraitUp,
             DeviceOrientation.portraitDown,

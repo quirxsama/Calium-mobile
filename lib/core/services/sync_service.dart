@@ -104,6 +104,38 @@ class SyncService with WidgetsBindingObserver {
         return p.clamp(0.0, 1.0);
       }
 
+      int parsePositionMs(Map<String, dynamic> item, double progress, int durationSec) {
+        final rawMs = item['positionMs'] ?? item['position_ms'];
+        if (rawMs is num && rawMs > 0) return rawMs.toInt();
+        if (rawMs is String) {
+          final parsed = int.tryParse(rawMs);
+          if (parsed != null && parsed > 0) return parsed;
+        }
+
+        final rawSec = item['currentTime'] ??
+            item['current_time'] ??
+            item['time'] ??
+            item['position'] ??
+            item['watchedTime'] ??
+            item['watched_time'];
+        if (rawSec is num && rawSec > 0) {
+          if (rawSec > 100000) return rawSec.toInt();
+          return (rawSec * 1000).round();
+        }
+        if (rawSec is String) {
+          final parsed = double.tryParse(rawSec);
+          if (parsed != null && parsed > 0) {
+            if (parsed > 100000) return parsed.toInt();
+            return (parsed * 1000).round();
+          }
+        }
+
+        if (progress > 0 && durationSec > 0) {
+          return (progress * durationSec * 1000).round();
+        }
+        return 0;
+      }
+
       // A. Prepare only locally changed (dirty) history items to upload
       final List<Map<String, dynamic>> localItemsToUpload = [];
       for (final key in historyBox.keys) {
@@ -141,10 +173,8 @@ class SyncService with WidgetsBindingObserver {
 
         final durationSec = (map['duration'] as num?)?.toInt() ?? 0;
         final progress = normalizeProgress(map['progress']);
-        final positionMs = (map['positionMs'] as num?)?.toInt() ??
-            (progress > 0 && durationSec > 0
-                ? (progress * durationSec * 1000).round()
-                : 0);
+        final positionMs = parsePositionMs(map, progress, durationSec);
+        final currentTimeSec = (positionMs / 1000.0).round();
 
         final cleanEpId = (epId.isNotEmpty && !epId.contains('_') && !epId.startsWith('ep-'))
             ? epId
@@ -161,6 +191,9 @@ class SyncService with WidgetsBindingObserver {
           'progress': progress,
           'duration': durationSec,
           'positionMs': positionMs,
+          'currentTime': currentTimeSec,
+          'time': currentTimeSec,
+          'position': currentTimeSec,
           'updatedAt': toEpochMs(map['updatedAt']),
         });
       }
@@ -216,11 +249,8 @@ class SyncService with WidgetsBindingObserver {
         final serverDuration = (sItem['duration'] as num?)?.toInt() ??
             (existingMap?['duration'] as num?)?.toInt() ??
             0;
-        final serverPositionMs = (sItem['positionMs'] as num?)?.toInt() ??
-            (existingMap?['positionMs'] as num?)?.toInt() ??
-            (serverProgress > 0 && serverDuration > 0
-                ? (serverProgress * serverDuration * 1000).round()
-                : 0);
+        final serverPositionMs = parsePositionMs(sItem, serverProgress, serverDuration);
+        final currentTimeSec = (serverPositionMs / 1000.0).round();
 
         final serverEpId = sItem['episodeId']?.toString() ?? '';
         final existingEpId = existingMap?['episodeId']?.toString() ?? '';
@@ -261,6 +291,9 @@ class SyncService with WidgetsBindingObserver {
           'progress': serverProgress,
           'duration': serverDuration,
           'positionMs': serverPositionMs,
+          'currentTime': currentTimeSec,
+          'time': currentTimeSec,
+          'position': currentTimeSec,
           'updatedAt': serverUpdated > 0 ? serverUpdated : localUpdated,
           if (shouldMarkDirtyToHealServer) 'dirty': true,
         });

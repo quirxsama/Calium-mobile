@@ -12,6 +12,7 @@ class HistoryEntity extends Equatable {
     required this.progress,
     required this.duration,
     required this.updatedAt,
+    this.positionMs = 0,
     this.episodeThumb = '',
   });
 
@@ -24,6 +25,7 @@ class HistoryEntity extends Equatable {
   final int episodeNumber;
   final double progress;
   final int duration;
+  final int positionMs;
   final DateTime updatedAt;
   final String episodeThumb;
 
@@ -38,6 +40,7 @@ class HistoryEntity extends Equatable {
         episodeNumber,
         progress,
         duration,
+        positionMs,
         updatedAt,
         episodeThumb,
       ];

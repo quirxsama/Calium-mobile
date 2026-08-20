@@ -77,6 +77,9 @@ class PlayerRepositoryImpl implements PlayerRepository {
           ? episodeThumb
           : (existingMap?['episodeThumb']?.toString() ?? '');
 
+      final posMs = position.inMilliseconds;
+      final posSec = position.inSeconds;
+
       await box.put(animeId, {
         'animeId': animeId,
         'animeName': effectiveTitle,
@@ -87,7 +90,10 @@ class PlayerRepositoryImpl implements PlayerRepository {
         'seasonNumber': seasonNumber,
         'episodeNumber': episodeNumber,
         'progress': progress,
-        'positionMs': position.inMilliseconds,
+        'positionMs': posMs,
+        'currentTime': posSec,
+        'time': posSec,
+        'position': posSec,
         'duration': duration.inSeconds,
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
         'dirty': true,
