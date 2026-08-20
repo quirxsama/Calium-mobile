@@ -341,8 +341,11 @@ class _ProfileView extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: InkWell(
               onTap: () {
+                final cleanEpId = (item.episodeId.isNotEmpty && !item.episodeId.contains('_'))
+                    ? item.episodeId
+                    : '';
                 context.push(
-                  '/watch/${item.animeId}?title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&s=${item.seasonNumber ?? 1}&ep=${item.episodeNumber ?? 1}&poster=${Uri.encodeComponent(item.poster ?? '')}',
+                  '/watch/${item.animeId}?title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&s=${item.seasonNumber ?? 1}&ep=${item.episodeNumber ?? 1}&poster=${Uri.encodeComponent(item.poster ?? '')}&episodeId=${Uri.encodeComponent(cleanEpId)}',
                 );
               },
               child: Row(
@@ -395,8 +398,11 @@ class _ProfileView extends StatelessWidget {
                   IconButton(
                     icon: const Icon(Icons.play_circle_fill_rounded, color: AppColors.primary, size: 36),
                     onPressed: () {
+                      final cleanEpId = (item.episodeId.isNotEmpty && !item.episodeId.contains('_'))
+                          ? item.episodeId
+                          : '';
                       context.push(
-                        '/watch/${item.animeId}?title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&s=${item.seasonNumber ?? 1}&ep=${item.episodeNumber ?? 1}&poster=${Uri.encodeComponent(item.poster ?? '')}',
+                        '/watch/${item.animeId}?title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&s=${item.seasonNumber ?? 1}&ep=${item.episodeNumber ?? 1}&poster=${Uri.encodeComponent(item.poster ?? '')}&episodeId=${Uri.encodeComponent(cleanEpId)}',
                       );
                     },
                   ),

@@ -252,6 +252,7 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                             int targetSeason = state.selectedSeason;
                             int targetEp = 1;
                             String targetEpTitle = 'Bölüm 1';
+                            String targetEpId = '';
                             bool hasHistory = false;
 
                             if (saved is Map) {
@@ -261,6 +262,10 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                                 targetSeason = sNum ?? targetSeason;
                                 targetEp = epNum;
                                 targetEpTitle = saved['episodeName']?.toString() ?? 'Bölüm $epNum';
+                                final sId = saved['episodeId']?.toString() ?? '';
+                                if (sId.isNotEmpty && !sId.contains('_')) {
+                                  targetEpId = sId;
+                                }
                                 hasHistory = true;
                               }
                             }
@@ -269,6 +274,14 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                               final firstEp = state.episodes.first;
                               targetEp = firstEp.episodeNumber;
                               targetEpTitle = firstEp.title ?? 'Bölüm ${firstEp.episodeNumber}';
+                              targetEpId = firstEp.id;
+                            } else if (targetEpId.isEmpty && state.episodes.isNotEmpty) {
+                              final matched = state.episodes.where(
+                                (e) => e.seasonNumber == targetSeason && e.episodeNumber == targetEp,
+                              );
+                              if (matched.isNotEmpty && matched.first.id.isNotEmpty && !matched.first.id.contains('_')) {
+                                targetEpId = matched.first.id;
+                              }
                             }
 
                             final buttonLabel = hasHistory
@@ -280,7 +293,7 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                               child: ElevatedButton.icon(
                                 onPressed: () {
                                   context.push(
-                                    '/watch/${detail.id}?url=&title=${Uri.encodeComponent(detail.title)}&episode=${Uri.encodeComponent(targetEpTitle)}&ep=$targetEp&s=$targetSeason&poster=${Uri.encodeComponent(detail.posterUrl)}',
+                                    '/watch/${detail.id}?url=&title=${Uri.encodeComponent(detail.title)}&episode=${Uri.encodeComponent(targetEpTitle)}&ep=$targetEp&s=$targetSeason&poster=${Uri.encodeComponent(detail.posterUrl)}&episodeId=${Uri.encodeComponent(targetEpId)}',
                                   );
                                 },
                                 icon: const Icon(
@@ -570,7 +583,7 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                     },
                     onDirectPlay: (episode) {
                       context.push(
-                        '/watch/${detail.id}?url=&title=${Uri.encodeComponent(detail.title)}&episode=${Uri.encodeComponent(episode.title ?? 'Bölüm ${episode.episodeNumber}')}&ep=${episode.episodeNumber}&s=${state.selectedSeason}&poster=${Uri.encodeComponent(detail.posterUrl)}',
+                        '/watch/${detail.id}?url=&title=${Uri.encodeComponent(detail.title)}&episode=${Uri.encodeComponent(episode.title ?? 'Bölüm ${episode.episodeNumber}')}&ep=${episode.episodeNumber}&s=${state.selectedSeason}&poster=${Uri.encodeComponent(detail.posterUrl)}&episodeId=${Uri.encodeComponent(episode.id)}',
                       );
                     },
                   ),

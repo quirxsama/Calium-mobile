@@ -88,10 +88,13 @@ class ContinueWatchingSection extends StatelessWidget {
                       title: item['episodeName']?.toString(),
                     );
 
+                    final rawEpId = item['episodeId']?.toString() ?? '';
+                    final cleanEpId = (rawEpId.isNotEmpty && !rawEpId.contains('_')) ? rawEpId : '';
+
                     return GestureDetector(
                       onTap: () {
                         context.push(
-                          '/watch/$animeId?title=${Uri.encodeComponent(animeName)}&episode=${Uri.encodeComponent(episodeName)}&ep=$epNum&s=$sNum&poster=${Uri.encodeComponent(poster)}',
+                          '/watch/$animeId?title=${Uri.encodeComponent(animeName)}&episode=${Uri.encodeComponent(episodeName)}&ep=$epNum&s=$sNum&poster=${Uri.encodeComponent(poster)}&episodeId=${Uri.encodeComponent(cleanEpId)}',
                         );
                       },
                       onLongPress: () => _showRemoveDialog(context, animeId, animeName),

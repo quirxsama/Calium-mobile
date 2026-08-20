@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:calium_stream/core/constants/storage_keys.dart';
 import 'package:calium_stream/core/services/sync_remote_datasource.dart';
+import 'package:calium_stream/features/anime_details/domain/repositories/anime_detail_repository.dart';
 import 'package:calium_stream/features/auth/domain/entities/user_entity.dart';
 
 class SyncService with WidgetsBindingObserver {
@@ -113,6 +115,30 @@ class SyncService with WidgetsBindingObserver {
         final animeId = map['animeId']?.toString() ?? key.toString();
         if (animeId.isEmpty) continue;
 
+        var epId = map['episodeId']?.toString() ?? '';
+        final sNum = (map['seasonNumber'] as num?)?.toInt() ?? 1;
+        final epNum = (map['episodeNumber'] as num?)?.toInt() ?? 1;
+
+        // Auto-heal legacy or corrupted episode IDs (e.g. "2_10" or "ep-1")
+        if (epId.isEmpty || epId.contains('_') || epId.startsWith('ep-')) {
+          try {
+            final detailRepo = GetIt.I<AnimeDetailRepository>();
+            final res = await detailRepo.getEpisodes(animeId: animeId, season: sNum);
+            res.fold((_) => null, (eps) {
+              for (final ep in eps) {
+                if (ep.seasonNumber == sNum && ep.episodeNumber == epNum) {
+                  if (ep.id.isNotEmpty && !ep.id.contains('_')) {
+                    epId = ep.id;
+                    map['episodeId'] = epId;
+                    historyBox.put(animeId, map);
+                  }
+                  break;
+                }
+              }
+            });
+          } catch (_) {}
+        }
+
         final durationSec = (map['duration'] as num?)?.toInt() ?? 0;
         final progress = normalizeProgress(map['progress']);
         final positionMs = (map['positionMs'] as num?)?.toInt() ??
@@ -120,14 +146,18 @@ class SyncService with WidgetsBindingObserver {
                 ? (progress * durationSec * 1000).round()
                 : 0);
 
+        final cleanEpId = (epId.isNotEmpty && !epId.contains('_') && !epId.startsWith('ep-'))
+            ? epId
+            : '$epNum';
+
         localItemsToUpload.add({
           'animeId': animeId,
           'animeName': map['animeName']?.toString() ?? 'Anime',
           'poster': map['poster']?.toString() ?? '',
-          'episodeId': map['episodeId']?.toString() ?? 'ep-1',
+          'episodeId': cleanEpId,
           'episodeName': map['episodeName']?.toString() ?? 'Bölüm 1',
-          'episodeNumber': (map['episodeNumber'] as num?)?.toInt() ?? 1,
-          'seasonNumber': (map['seasonNumber'] as num?)?.toInt() ?? 1,
+          'episodeNumber': epNum,
+          'seasonNumber': sNum,
           'progress': progress,
           'duration': durationSec,
           'positionMs': positionMs,
@@ -145,6 +175,7 @@ class SyncService with WidgetsBindingObserver {
           if (existing is Map) {
             final cleaned = Map<String, dynamic>.from(existing);
             cleaned['dirty'] = false;
+            cleaned['episodeId'] = item['episodeId'];
             await historyBox.put(animeId, cleaned);
           }
         }
@@ -191,6 +222,21 @@ class SyncService with WidgetsBindingObserver {
                 ? (serverProgress * serverDuration * 1000).round()
                 : 0);
 
+        final serverEpId = sItem['episodeId']?.toString() ?? '';
+        final existingEpId = existingMap?['episodeId']?.toString() ?? '';
+
+        String resolvedEpId = serverEpId;
+        bool shouldMarkDirtyToHealServer = false;
+
+        if (resolvedEpId.isEmpty || resolvedEpId.contains('_') || resolvedEpId.startsWith('ep-')) {
+          if (existingEpId.isNotEmpty && !existingEpId.contains('_') && !existingEpId.startsWith('ep-')) {
+            resolvedEpId = existingEpId;
+            shouldMarkDirtyToHealServer = true;
+          } else {
+            resolvedEpId = (sItem['episodeNumber'] ?? existingMap?['episodeNumber'] ?? 1).toString();
+          }
+        }
+
         await historyBox.put(animeId, {
           'animeId': animeId,
           'animeName': sItem['animeName']?.toString() ??
@@ -202,9 +248,7 @@ class SyncService with WidgetsBindingObserver {
           'episodeThumb': sItem['episodeThumb']?.toString() ??
               existingMap?['episodeThumb']?.toString() ??
               '',
-          'episodeId': sItem['episodeId']?.toString() ??
-              existingMap?['episodeId']?.toString() ??
-              'ep-1',
+          'episodeId': resolvedEpId,
           'episodeName': sItem['episodeName']?.toString() ??
               existingMap?['episodeName']?.toString() ??
               'Bölüm 1',
@@ -218,6 +262,7 @@ class SyncService with WidgetsBindingObserver {
           'duration': serverDuration,
           'positionMs': serverPositionMs,
           'updatedAt': serverUpdated > 0 ? serverUpdated : localUpdated,
+          if (shouldMarkDirtyToHealServer) 'dirty': true,
         });
       }
     } catch (_) {}

@@ -28,6 +28,7 @@ class AnimePlayerView extends StatelessWidget {
     required this.animeId,
     required this.animeTitle,
     required this.episodeTitle,
+    this.episodeId = '',
     this.seasonNumber = 1,
     this.episodeNumber = 1,
     this.streamUrl = '',
@@ -38,6 +39,7 @@ class AnimePlayerView extends StatelessWidget {
   final String animeId;
   final String animeTitle;
   final String episodeTitle;
+  final String episodeId;
   final int seasonNumber;
   final int episodeNumber;
   final String streamUrl;
@@ -57,6 +59,7 @@ class AnimePlayerView extends StatelessWidget {
         animeId: animeId,
         animeTitle: animeTitle,
         episodeTitle: episodeTitle,
+        episodeId: episodeId,
         seasonNumber: seasonNumber,
         episodeNumber: episodeNumber,
         posterUrl: posterUrl,
@@ -70,6 +73,7 @@ class _AnimePlayerContent extends StatefulWidget {
     required this.animeId,
     required this.animeTitle,
     required this.episodeTitle,
+    this.episodeId = '',
     required this.seasonNumber,
     required this.episodeNumber,
     required this.posterUrl,
@@ -78,6 +82,7 @@ class _AnimePlayerContent extends StatefulWidget {
   final String animeId;
   final String animeTitle;
   final String episodeTitle;
+  final String episodeId;
   final int seasonNumber;
   final int episodeNumber;
   final String posterUrl;
@@ -93,6 +98,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   late int _currentSeasonNumber;
   late int _currentEpisodeNumber;
   late String _currentEpisodeTitle;
+  late String _currentEpisodeId;
 
   bool _showControls = true;
   bool _isLocked = false;
@@ -134,6 +140,9 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     _currentSeasonNumber = widget.seasonNumber;
     _currentEpisodeNumber = widget.episodeNumber;
     _currentEpisodeTitle = widget.episodeTitle;
+    _currentEpisodeId = (widget.episodeId.isNotEmpty && !widget.episodeId.contains('_'))
+        ? widget.episodeId
+        : '';
 
     // Read saved progress from Hive
     try {
@@ -143,6 +152,10 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
         final epNum = int.tryParse(saved['episodeNumber']?.toString() ?? '');
         if (sNum == _currentSeasonNumber && epNum == _currentEpisodeNumber) {
+          final savedEpId = saved['episodeId']?.toString() ?? '';
+          if (_currentEpisodeId.isEmpty && savedEpId.isNotEmpty && !savedEpId.contains('_')) {
+            _currentEpisodeId = savedEpId;
+          }
           var posMs = (saved['positionMs'] as num?)?.toInt() ?? 0;
           if (posMs <= 0) {
             final progress = (saved['progress'] as num?)?.toDouble() ?? 0.0;
@@ -247,20 +260,46 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   void _saveCurrentProgress(Duration pos) {
     if (pos.inSeconds < 4) return;
     String episodeThumb = '';
+    String resolvedEpId = _currentEpisodeId;
     try {
       for (final ep in _seasonEpisodes) {
         if (ep.seasonNumber == _currentSeasonNumber &&
             ep.episodeNumber == _currentEpisodeNumber) {
           episodeThumb = ep.thumbnailUrl ?? '';
+          if (ep.id.isNotEmpty && !ep.id.contains('_')) {
+            resolvedEpId = ep.id;
+            _currentEpisodeId = ep.id;
+          }
           break;
         }
       }
     } catch (_) {}
+
+    if (resolvedEpId.isEmpty || resolvedEpId.contains('_')) {
+      try {
+        final box = Hive.box('history');
+        final saved = box.get(widget.animeId);
+        if (saved is Map) {
+          final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
+          final epNum = int.tryParse(saved['episodeNumber']?.toString() ?? '');
+          final sId = saved['episodeId']?.toString() ?? '';
+          if (sNum == _currentSeasonNumber && epNum == _currentEpisodeNumber && sId.isNotEmpty && !sId.contains('_')) {
+            resolvedEpId = sId;
+            _currentEpisodeId = sId;
+          }
+        }
+      } catch (_) {}
+    }
+
+    final finalEpId = (resolvedEpId.isNotEmpty && !resolvedEpId.contains('_'))
+        ? resolvedEpId
+        : _currentEpisodeNumber.toString();
+
     GetIt.I<PlayerRepository>().saveWatchProgress(
       animeId: widget.animeId,
       animeTitle: widget.animeTitle,
       posterUrl: widget.posterUrl,
-      episodeId: '${_currentSeasonNumber}_$_currentEpisodeNumber',
+      episodeId: finalEpId,
       episodeTitle: _currentEpisodeTitle,
       seasonNumber: _currentSeasonNumber,
       episodeNumber: _currentEpisodeNumber,
@@ -279,7 +318,20 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       res.fold(
         (_) => null,
         (eps) {
-          if (mounted) setState(() => _seasonEpisodes = eps);
+          if (mounted) {
+            setState(() {
+              _seasonEpisodes = eps;
+              for (final ep in eps) {
+                if (ep.seasonNumber == _currentSeasonNumber &&
+                    ep.episodeNumber == _currentEpisodeNumber) {
+                  if (ep.id.isNotEmpty && !ep.id.contains('_')) {
+                    _currentEpisodeId = ep.id;
+                  }
+                  break;
+                }
+              }
+            });
+          }
         },
       );
     } catch (_) {}
@@ -361,11 +413,15 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     setState(() => _isDismissedNextEpPrompt = true);
   }
 
-  void _switchEpisode(int season, int episode, String? title) {
+  void _switchEpisode(int season, int episode, String? title, {String? episodeId}) {
     _autoNextTimer?.cancel();
     _autoNextTimer = null;
 
     int savedSeekMs = 0;
+    String targetEpId = (episodeId != null && episodeId.isNotEmpty && !episodeId.contains('_'))
+        ? episodeId
+        : '';
+
     try {
       final box = Hive.box('history');
       final saved = box.get(widget.animeId);
@@ -373,6 +429,12 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
         final epNum = int.tryParse(saved['episodeNumber']?.toString() ?? '');
         if (sNum == season && epNum == episode) {
+          if (targetEpId.isEmpty) {
+            final sId = saved['episodeId']?.toString() ?? '';
+            if (sId.isNotEmpty && !sId.contains('_')) {
+              targetEpId = sId;
+            }
+          }
           var posMs = (saved['positionMs'] as num?)?.toInt() ?? 0;
           if (posMs <= 0) {
             final progress = (saved['progress'] as num?)?.toDouble() ?? 0.0;
@@ -388,10 +450,22 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       }
     } catch (_) {}
 
+    if (targetEpId.isEmpty && season == _currentSeasonNumber) {
+      for (final ep in _seasonEpisodes) {
+        if (ep.seasonNumber == season && ep.episodeNumber == episode) {
+          if (ep.id.isNotEmpty && !ep.id.contains('_')) {
+            targetEpId = ep.id;
+          }
+          break;
+        }
+      }
+    }
+
     setState(() {
       _currentSeasonNumber = season;
       _currentEpisodeNumber = episode;
       _currentEpisodeTitle = title ?? 'Bölüm $episode';
+      _currentEpisodeId = targetEpId;
       _position = Duration.zero;
       _positionNotifier.value = Duration.zero;
       _duration = Duration.zero;
@@ -509,7 +583,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           currentEpisodeNumber: _currentEpisodeNumber,
           currentSeasonNumber: _currentSeasonNumber,
           onEpisodeSelected: (ep) {
-            _switchEpisode(ep.seasonNumber, ep.episodeNumber, ep.title);
+            _switchEpisode(ep.seasonNumber, ep.episodeNumber, ep.title, episodeId: ep.id);
           },
         );
       },

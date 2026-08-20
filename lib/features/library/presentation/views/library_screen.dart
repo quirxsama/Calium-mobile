@@ -604,8 +604,11 @@ class _LibraryScreenState extends State<LibraryScreen>
                         alignment: Alignment.centerRight,
                         child: TextButton.icon(
                           onPressed: () {
+                            final cleanEpId = (item.episodeId.isNotEmpty && !item.episodeId.contains('_'))
+                                ? item.episodeId
+                                : '';
                             context.push(
-                              '/watch/${item.animeId}?url=&title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&ep=${item.episodeNumber}&s=${item.seasonNumber}&poster=${Uri.encodeComponent(item.posterUrl)}',
+                              '/watch/${item.animeId}?url=&title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&ep=${item.episodeNumber}&s=${item.seasonNumber}&poster=${Uri.encodeComponent(item.posterUrl)}&episodeId=${Uri.encodeComponent(cleanEpId)}',
                             );
                           },
                           icon: const Icon(

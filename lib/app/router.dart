@@ -177,6 +177,9 @@ class AppRouter {
           final animeId = state.pathParameters['animeId'] ?? '';
           final animeTitle = state.uri.queryParameters['title'] ?? 'Anime';
           final episodeTitle = state.uri.queryParameters['episode'] ?? 'Bölüm 1';
+          final episodeId = state.uri.queryParameters['episodeId'] ??
+              state.uri.queryParameters['epId'] ??
+              '';
           final season = int.tryParse(state.uri.queryParameters['s'] ?? '1') ?? 1;
           final episode = int.tryParse(state.uri.queryParameters['ep'] ?? '1') ?? 1;
           final streamUrl = state.uri.queryParameters['url'] ?? '';
@@ -186,6 +189,7 @@ class AppRouter {
             animeId: animeId,
             animeTitle: animeTitle,
             episodeTitle: episodeTitle,
+            episodeId: episodeId,
             seasonNumber: season,
             episodeNumber: episode,
             streamUrl: streamUrl,
