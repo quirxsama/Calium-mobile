@@ -11,8 +11,7 @@ abstract class SyncRemoteDataSource {
 }
 
 class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
-  const SyncRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const SyncRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 

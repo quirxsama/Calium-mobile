@@ -76,8 +76,8 @@ final class SettingsFailure extends SettingsState {
 
 // ─── Bloc ────────────────────────────────────────────────────
 class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
-  SettingsBloc({required SettingsRepository repository})
-      : _repository = repository,
+  SettingsBloc({required this._repository})
+      :
         super(SettingsInitial()) {
     on<UpdateProfileRequested>(_onUpdateProfile);
     on<ChangePasswordRequested>(_onChangePassword);

@@ -21,8 +21,7 @@ class GetExploreCatalogParams extends Equatable {
 }
 
 class GetExploreCatalogUseCase {
-  const GetExploreCatalogUseCase({required ExploreRepository repository})
-      : _repository = repository;
+  const GetExploreCatalogUseCase({required this._repository});
 
   final ExploreRepository _repository;
 

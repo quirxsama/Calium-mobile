@@ -19,8 +19,7 @@ abstract class SettingsRemoteDataSource {
 }
 
 class SettingsRemoteDataSourceImpl implements SettingsRemoteDataSource {
-  const SettingsRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const SettingsRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 

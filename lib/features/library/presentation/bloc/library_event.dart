@@ -21,3 +21,12 @@ final class ToggleFavoriteRequested extends LibraryEvent {
 }
 
 final class ClearHistoryRequested extends LibraryEvent {}
+
+final class RemoveHistoryItemRequested extends LibraryEvent {
+  const RemoveHistoryItemRequested({required this.animeId});
+
+  final String animeId;
+
+  @override
+  List<Object?> get props => [animeId];
+}

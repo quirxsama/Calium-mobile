@@ -35,8 +35,8 @@ EventTransformer<T> _debounce<T>(Duration duration) {
 }
 
 class SearchBloc extends Bloc<SearchEvent, SearchState> {
-  SearchBloc({required SearchAnimeUseCase searchAnimeUseCase})
-      : _searchAnimeUseCase = searchAnimeUseCase,
+  SearchBloc({required this._searchAnimeUseCase})
+      :
         super(SearchInitial()) {
     on<SearchQueryChanged>(
       _onSearchQueryChanged,

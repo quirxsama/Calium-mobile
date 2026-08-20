@@ -176,14 +176,17 @@ class _ProfileView extends StatelessWidget {
                 ),
               ],
             ),
-            child: CircleAvatar(
-              radius: 42,
-              backgroundColor: AppColors.surfaceElevated,
-              backgroundImage: profile.avatarUrl != null && profile.avatarUrl!.isNotEmpty
-                  ? NetworkImage(profile.avatarUrl!)
-                  : null,
-              child: profile.avatarUrl == null || profile.avatarUrl!.isEmpty
-                  ? Text(
+            child: SizedBox(
+              width: 84,
+              height: 84,
+              child: ClipOval(
+                child: AppCachedImage(
+                  imageUrl: profile.avatarUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: Container(
+                    color: AppColors.surfaceElevated,
+                    alignment: Alignment.center,
+                    child: Text(
                       profile.displayName.isNotEmpty
                           ? profile.displayName[0].toUpperCase()
                           : 'U',
@@ -192,8 +195,10 @@ class _ProfileView extends StatelessWidget {
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                       ),
-                    )
-                  : null,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -337,7 +342,7 @@ class _ProfileView extends StatelessWidget {
             child: InkWell(
               onTap: () {
                 context.push(
-                  '/watch/${item.animeId}?title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&s=${item.seasonNumber ?? 1}&ep=${item.episodeNumber ?? 1}',
+                  '/watch/${item.animeId}?title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&s=${item.seasonNumber ?? 1}&ep=${item.episodeNumber ?? 1}&poster=${Uri.encodeComponent(item.poster ?? '')}',
                 );
               },
               child: Row(
@@ -391,7 +396,7 @@ class _ProfileView extends StatelessWidget {
                     icon: const Icon(Icons.play_circle_fill_rounded, color: AppColors.primary, size: 36),
                     onPressed: () {
                       context.push(
-                        '/watch/${item.animeId}?title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&s=${item.seasonNumber ?? 1}&ep=${item.episodeNumber ?? 1}',
+                        '/watch/${item.animeId}?title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&s=${item.seasonNumber ?? 1}&ep=${item.episodeNumber ?? 1}&poster=${Uri.encodeComponent(item.poster ?? '')}',
                       );
                     },
                   ),

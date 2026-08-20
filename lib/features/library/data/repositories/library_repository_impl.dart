@@ -10,10 +10,9 @@ import 'package:calium_stream/features/library/domain/repositories/library_repos
 
 class LibraryRepositoryImpl implements LibraryRepository {
   const LibraryRepositoryImpl({
-    required LibraryLocalDataSource localDataSource,
-    required LibraryRemoteDataSource remoteDataSource,
-  })  : _localDataSource = localDataSource,
-        _remoteDataSource = remoteDataSource;
+    required this._localDataSource,
+    required this._remoteDataSource,
+  });
 
   final LibraryLocalDataSource _localDataSource;
   final LibraryRemoteDataSource _remoteDataSource;
@@ -55,9 +54,9 @@ class LibraryRepositoryImpl implements LibraryRepository {
       );
       final isNowFavorite = await _localDataSource.toggleFavorite(model);
 
-      // Cloud background sync
+      // Cloud sync - await to ensure cloud is updated before next fetch
       final currentList = await _localDataSource.getFavorites();
-      _remoteDataSource.syncFavorites(currentList);
+      await _remoteDataSource.syncFavorites(currentList);
 
       return Right(isNowFavorite);
     } catch (e) {
@@ -88,6 +87,16 @@ class LibraryRepositoryImpl implements LibraryRepository {
     } catch (e) {
       final list = await _localDataSource.getHistory();
       return Right(list);
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> removeHistoryItem(String animeId) async {
+    try {
+      await _localDataSource.deleteHistoryItem(animeId);
+      return const Right(null);
+    } catch (e) {
+      return Left(CacheFailure(message: e.toString()));
     }
   }
 

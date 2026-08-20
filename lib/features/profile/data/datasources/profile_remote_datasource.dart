@@ -12,10 +12,9 @@ abstract class ProfileRemoteDataSource {
 
 class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
   const ProfileRemoteDataSourceImpl({
-    required DioClient dioClient,
-    required FlutterSecureStorage secureStorage,
-  })  : _dioClient = dioClient,
-        _secureStorage = secureStorage;
+    required this._dioClient,
+    required this._secureStorage,
+  });
 
   final DioClient _dioClient;
   final FlutterSecureStorage _secureStorage;

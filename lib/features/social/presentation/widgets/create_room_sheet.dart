@@ -186,7 +186,7 @@ class _CreateRoomSheetState extends State<CreateRoomSheet> {
                   'Açıksa diğer kullanıcılar odanızı sosyal sekmesinde görebilir',
                   style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                 ),
-                activeColor: AppColors.primary,
+                activeThumbColor: AppColors.primary,
                 value: _isPublic,
                 onChanged: (v) => setState(() => _isPublic = v),
               ),

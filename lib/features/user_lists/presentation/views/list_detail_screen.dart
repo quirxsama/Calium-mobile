@@ -50,6 +50,52 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     );
   }
 
+  Future<void> _confirmRemoveItem(ListItemEntity item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        title: const Text(
+          'Listeden Kaldır',
+          style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          '"${item.name}" bu listeden kaldırılsın mı?',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Kaldır',
+              style: TextStyle(color: AppColors.accentCrimson, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final res = await GetIt.I<UserListsRepository>().removeAnimeFromList(
+      listId: widget.listId,
+      animeId: item.animeId,
+    );
+    res.fold(
+      (f) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(f.message)),
+          );
+        }
+      },
+      (_) => _fetchDetails(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -170,14 +216,16 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                               delegate: SliverChildBuilderDelegate(
                                 (context, index) {
                                   final item = _list!.items[index];
-                                  return AnimePosterCard(
-                                    id: item.animeId,
-                                    title: item.name,
-                                    posterUrl: item.poster ?? '',
-                                    rating: 0,
-                                    onTap: () {
-                                      context.push('/anime/${item.animeId}');
-                                    },
+                                  return GestureDetector(
+                                    onLongPress: () => _confirmRemoveItem(item),
+                                    child: AnimePosterCard(
+                                      id: item.animeId,
+                                      title: item.name,
+                                      posterUrl: item.poster ?? '',
+                                      onTap: () {
+                                        context.push('/anime/${item.animeId}');
+                                      },
+                                    ),
                                   );
                                 },
                                 childCount: _list!.items.length,

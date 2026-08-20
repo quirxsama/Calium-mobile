@@ -11,12 +11,14 @@ abstract class LibraryLocalDataSource {
   Future<List<HistoryModel>> getHistory();
   Future<void> saveHistory(HistoryModel history);
   Future<void> saveHistoryBulk(List<HistoryModel> history);
+  Future<void> deleteHistoryItem(String animeId);
   Future<void> clearHistory();
 }
 
 class LibraryLocalDataSourceImpl implements LibraryLocalDataSource {
   Box get _favBox => Hive.box('favorites');
   Box get _histBox => Hive.box('history');
+  Box get _favDeletedBox => Hive.box('favorites_deleted');
 
   @override
   Future<List<FavoriteModel>> getFavorites() async {
@@ -35,8 +37,17 @@ class LibraryLocalDataSourceImpl implements LibraryLocalDataSource {
   Future<bool> toggleFavorite(FavoriteModel favorite) async {
     if (_favBox.containsKey(favorite.animeId)) {
       await _favBox.delete(favorite.animeId);
+      try {
+        await _favDeletedBox.put(
+          favorite.animeId,
+          DateTime.now().millisecondsSinceEpoch,
+        );
+      } catch (_) {}
       return false;
     } else {
+      try {
+        await _favDeletedBox.delete(favorite.animeId);
+      } catch (_) {}
       await _favBox.put(favorite.animeId, favorite.toJson());
       return true;
     }
@@ -50,6 +61,8 @@ class LibraryLocalDataSourceImpl implements LibraryLocalDataSource {
   @override
   Future<void> saveFavoritesBulk(List<FavoriteModel> favorites) async {
     for (final f in favorites) {
+      // If locally marked as deleted, do not resurrect from cloud
+      if (_favDeletedBox.containsKey(f.animeId)) continue;
       await _favBox.put(f.animeId, f.toJson());
     }
   }
@@ -69,18 +82,57 @@ class LibraryLocalDataSourceImpl implements LibraryLocalDataSource {
 
   @override
   Future<void> saveHistory(HistoryModel history) async {
+    await _clearTombstone(history.animeId);
     await _histBox.put(history.animeId, history.toJson());
   }
 
   @override
   Future<void> saveHistoryBulk(List<HistoryModel> history) async {
     for (final h in history) {
-      await _histBox.put(h.animeId, h.toJson());
+      final existing = _histBox.get(h.animeId);
+      if (existing is Map) {
+        final localUpdated = (existing['updatedAt'] is num)
+            ? (existing['updatedAt'] as num).toInt()
+            : 0;
+        final incoming = h.updatedAt.millisecondsSinceEpoch;
+        // Cloud data must not roll back newer local progress
+        if (localUpdated > 0 && incoming < localUpdated) continue;
+      }
+      final json = h.toJson();
+      // Preserve precise resume position that cloud data doesn't carry
+      if (existing is Map && existing['positionMs'] != null) {
+        json['positionMs'] = existing['positionMs'];
+      }
+      // Preserve episode thumbnail captured during local playback
+      if (existing is Map && existing['episodeThumb'] != null) {
+        json['episodeThumb'] = existing['episodeThumb'];
+      }
+      await _histBox.put(h.animeId, json);
     }
+  }
+
+  Future<void> _clearTombstone(String animeId) async {
+    try {
+      final deletedBox = Hive.box('history_deleted');
+      await deletedBox.delete(animeId);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> deleteHistoryItem(String animeId) async {
+    await _histBox.delete(animeId);
+    // Tombstone prevents cloud sync from re-adding the removed item
+    try {
+      final deletedBox = Hive.box('history_deleted');
+      await deletedBox.put(animeId, DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {}
   }
 
   @override
   Future<void> clearHistory() async {
     await _histBox.clear();
+    try {
+      await Hive.box('history_deleted').clear();
+    } catch (_) {}
   }
 }

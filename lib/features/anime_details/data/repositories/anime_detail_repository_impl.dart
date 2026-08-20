@@ -11,8 +11,8 @@ import 'package:calium_stream/features/anime_details/domain/repositories/anime_d
 
 class AnimeDetailRepositoryImpl implements AnimeDetailRepository {
   const AnimeDetailRepositoryImpl({
-    required AnimeDetailRemoteDataSource remoteDataSource,
-  }) : _remoteDataSource = remoteDataSource;
+    required this._remoteDataSource,
+  });
 
   final AnimeDetailRemoteDataSource _remoteDataSource;
 

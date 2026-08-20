@@ -59,8 +59,8 @@ final class CalendarFailure extends CalendarState {
 
 // ─── Bloc ────────────────────────────────────────────────────
 class CalendarBloc extends Bloc<CalendarEvent, CalendarState> {
-  CalendarBloc({required GetCalendarUseCase getCalendarUseCase})
-      : _getCalendarUseCase = getCalendarUseCase,
+  CalendarBloc({required this._getCalendarUseCase})
+      :
         super(CalendarInitial()) {
     on<LoadCalendarRequested>(_onLoadCalendar);
   }

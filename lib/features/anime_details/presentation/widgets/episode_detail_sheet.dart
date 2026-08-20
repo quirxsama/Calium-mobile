@@ -26,7 +26,7 @@ class EpisodeDetailSheet extends StatelessWidget {
     Navigator.of(context).pop();
     final epTitle = episode.title ?? 'Bölüm ${episode.episodeNumber}';
     context.push(
-      '/watch/${animeDetail.id}?url=&title=${Uri.encodeComponent(animeDetail.title)}&episode=${Uri.encodeComponent(epTitle)}&ep=${episode.episodeNumber}&s=$seasonNumber',
+      '/watch/${animeDetail.id}?url=&title=${Uri.encodeComponent(animeDetail.title)}&episode=${Uri.encodeComponent(epTitle)}&ep=${episode.episodeNumber}&s=$seasonNumber&poster=${Uri.encodeComponent(animeDetail.posterUrl)}',
     );
   }
 

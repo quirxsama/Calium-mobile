@@ -18,6 +18,7 @@ import 'package:calium_stream/features/user_lists/presentation/views/list_detail
 import 'package:calium_stream/features/settings/presentation/views/settings_screen.dart';
 import 'package:calium_stream/features/downloads/presentation/views/downloads_screen.dart';
 import 'package:calium_stream/features/profile/presentation/views/profile_screen.dart';
+import 'package:calium_stream/features/social/presentation/views/social_screen.dart';
 
 class _MainShell extends StatelessWidget {
   const _MainShell({required this.navigationShell});
@@ -55,6 +56,11 @@ class _MainShell extends StatelessWidget {
             label: 'Ara',
           ),
           NavigationDestination(
+            icon: Icon(Icons.people_outline, color: AppColors.textSecondary),
+            selectedIcon: Icon(Icons.people_rounded, color: AppColors.primary),
+            label: 'Sosyal',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.video_library_outlined, color: AppColors.textSecondary),
             selectedIcon: Icon(Icons.video_library_rounded, color: AppColors.primary),
             label: 'Kitaplık',
@@ -71,6 +77,7 @@ class AppRouter {
   static final _shellNavigatorHomeKey = GlobalKey<NavigatorState>(debugLabel: 'home');
   static final _shellNavigatorExploreKey = GlobalKey<NavigatorState>(debugLabel: 'explore');
   static final _shellNavigatorSearchKey = GlobalKey<NavigatorState>(debugLabel: 'search');
+  static final _shellNavigatorSocialKey = GlobalKey<NavigatorState>(debugLabel: 'social');
   static final _shellNavigatorLibraryKey = GlobalKey<NavigatorState>(debugLabel: 'library');
 
   static final GoRouter router = GoRouter(
@@ -102,15 +109,6 @@ class AppRouter {
               GoRoute(
                 path: '/',
                 builder: (context, state) => const HomeScreen(),
-                routes: [
-                  GoRoute(
-                    path: 'anime/:id',
-                    builder: (context, state) {
-                      final animeId = state.pathParameters['id']!;
-                      return AnimeDetailScreen(animeId: animeId);
-                    },
-                  ),
-                ],
               ),
             ],
           ),
@@ -133,6 +131,17 @@ class AppRouter {
               GoRoute(
                 path: '/search',
                 builder: (context, state) => const SearchScreen(),
+              ),
+            ],
+          ),
+
+          // 3: Social Branch
+          StatefulShellBranch(
+            navigatorKey: _shellNavigatorSocialKey,
+            routes: [
+              GoRoute(
+                path: '/social',
+                builder: (context, state) => const SocialScreen(),
               ),
             ],
           ),
@@ -171,6 +180,7 @@ class AppRouter {
           final season = int.tryParse(state.uri.queryParameters['s'] ?? '1') ?? 1;
           final episode = int.tryParse(state.uri.queryParameters['ep'] ?? '1') ?? 1;
           final streamUrl = state.uri.queryParameters['url'] ?? '';
+          final posterUrl = state.uri.queryParameters['poster'] ?? '';
 
           return AnimePlayerView(
             animeId: animeId,
@@ -179,6 +189,7 @@ class AppRouter {
             seasonNumber: season,
             episodeNumber: episode,
             streamUrl: streamUrl,
+            posterUrl: posterUrl,
           );
         },
       ),

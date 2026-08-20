@@ -5,8 +5,7 @@ import 'package:calium_stream/features/library/domain/entities/history_entity.da
 import 'package:calium_stream/features/library/domain/repositories/library_repository.dart';
 
 class GetHistoryUseCase {
-  const GetHistoryUseCase({required LibraryRepository repository})
-      : _repository = repository;
+  const GetHistoryUseCase({required this._repository});
 
   final LibraryRepository _repository;
 

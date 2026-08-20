@@ -68,6 +68,15 @@ final class ToggleLikeListRequested extends UserListsEvent {
   List<Object?> get props => [listId, currentlyLiked];
 }
 
+final class DeleteUserListRequested extends UserListsEvent {
+  const DeleteUserListRequested({required this.listId});
+
+  final String listId;
+
+  @override
+  List<Object?> get props => [listId];
+}
+
 // ─── States ──────────────────────────────────────────────────
 sealed class UserListsState extends Equatable {
   const UserListsState();
@@ -104,14 +113,15 @@ final class UserListsFailure extends UserListsState {
 
 // ─── Bloc ────────────────────────────────────────────────────
 class UserListsBloc extends Bloc<UserListsEvent, UserListsState> {
-  UserListsBloc({required UserListsRepository repository})
-      : _repository = repository,
+  UserListsBloc({required this._repository})
+      :
         super(UserListsInitial()) {
     on<LoadUserListsRequested>(_onLoadUserLists);
     on<CreateUserListRequested>(_onCreateUserList);
     on<AddAnimeToListRequested>(_onAddAnimeToList);
     on<RemoveAnimeFromListRequested>(_onRemoveAnimeFromList);
     on<ToggleLikeListRequested>(_onToggleLikeList);
+    on<DeleteUserListRequested>(_onDeleteUserList);
   }
 
   final UserListsRepository _repository;
@@ -179,5 +189,16 @@ class UserListsBloc extends Bloc<UserListsEvent, UserListsState> {
   ) async {
     await _repository.toggleLikeList(event.listId, currentlyLiked: event.currentlyLiked);
     add(LoadUserListsRequested());
+  }
+
+  Future<void> _onDeleteUserList(
+    DeleteUserListRequested event,
+    Emitter<UserListsState> emit,
+  ) async {
+    final res = await _repository.deleteList(event.listId);
+    res.fold(
+      (f) => emit(UserListsFailure(message: f.message)),
+      (_) => add(LoadUserListsRequested()),
+    );
   }
 }

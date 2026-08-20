@@ -68,7 +68,7 @@ class _SocialScreenState extends State<SocialScreen> {
             return ListView.builder(
               padding: const EdgeInsets.all(AppSpacing.screenPadding),
               itemCount: 5,
-              itemBuilder: (_, __) => const Padding(
+              itemBuilder: (_, _) => const Padding(
                 padding: EdgeInsets.only(bottom: AppSpacing.md),
                 child: ShimmerPlaceholder(height: 70),
               ),
@@ -131,7 +131,7 @@ class _SocialScreenState extends State<SocialScreen> {
               child: ListView.separated(
                 padding: const EdgeInsets.all(AppSpacing.screenPadding),
                 itemCount: state.friends.length,
-                separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+                separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
                 itemBuilder: (context, index) {
                   final friend = state.friends[index];
                   return _buildFriendTile(context, friend);

@@ -11,6 +11,8 @@ abstract class LibraryRepository {
 
   Future<Either<Failure, List<HistoryEntity>>> getHistory();
 
+  Future<Either<Failure, void>> removeHistoryItem(String animeId);
+
   Future<Either<Failure, void>> clearHistory();
 
   Future<Either<Failure, void>> syncWithCloud();

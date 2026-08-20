@@ -21,8 +21,7 @@ class GetVideoSourcesParams extends Equatable {
 }
 
 class GetVideoSourcesUseCase {
-  const GetVideoSourcesUseCase({required PlayerRepository repository})
-      : _repository = repository;
+  const GetVideoSourcesUseCase({required this._repository});
 
   final PlayerRepository _repository;
 

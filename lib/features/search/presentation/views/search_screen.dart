@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -206,7 +207,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
                     return GridView.builder(
                       controller: _scrollController,
-                      cacheExtent: 600,
+                      scrollCacheExtent: ScrollCacheExtent.pixels(600),
                       addRepaintBoundaries: true,
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.screenPadding,
@@ -255,7 +256,7 @@ class _SearchScreenState extends State<SearchScreen> {
         mainAxisSpacing: AppSpacing.md,
       ),
       itemCount: 9,
-      itemBuilder: (_, __) => const Column(
+      itemBuilder: (_, _) => const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(

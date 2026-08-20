@@ -4,8 +4,7 @@ import 'package:calium_stream/features/calendar/domain/entities/calendar_day_ent
 import 'package:calium_stream/features/calendar/domain/repositories/calendar_repository.dart';
 
 class GetCalendarUseCase {
-  const GetCalendarUseCase({required CalendarRepository repository})
-      : _repository = repository;
+  const GetCalendarUseCase({required this._repository});
 
   final CalendarRepository _repository;
 

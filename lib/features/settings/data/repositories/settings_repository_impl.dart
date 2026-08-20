@@ -20,8 +20,7 @@ abstract class SettingsRepository {
 }
 
 class SettingsRepositoryImpl implements SettingsRepository {
-  const SettingsRepositoryImpl({required SettingsRemoteDataSource remoteDataSource})
-      : _remoteDataSource = remoteDataSource;
+  const SettingsRepositoryImpl({required this._remoteDataSource});
 
   final SettingsRemoteDataSource _remoteDataSource;
 

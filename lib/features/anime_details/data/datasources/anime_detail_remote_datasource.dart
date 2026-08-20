@@ -15,8 +15,7 @@ abstract class AnimeDetailRemoteDataSource {
 }
 
 class AnimeDetailRemoteDataSourceImpl implements AnimeDetailRemoteDataSource {
-  const AnimeDetailRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const AnimeDetailRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 
@@ -90,6 +89,17 @@ class AnimeDetailRemoteDataSourceImpl implements AnimeDetailRemoteDataSource {
 
   @override
   Future<List<AnimeModel>> getSimilarAnime(String animeId) async {
+    final merged = <AnimeModel>[];
+    final seenIds = <String>{animeId};
+
+    void addAll(List<AnimeModel> items) {
+      for (final item in items) {
+        if (item.id.isEmpty || seenIds.contains(item.id)) continue;
+        seenIds.add(item.id);
+        merged.add(item);
+      }
+    }
+
     // 1. Try Calium backend similar route first (uses asset proxy, proper posters, and caching)
     try {
       final response = await _dioClient.get(
@@ -111,10 +121,7 @@ class AnimeDetailRemoteDataSourceImpl implements AnimeDetailRemoteDataSource {
               .toList();
         }
       }
-
-      if (list.isNotEmpty) {
-        return list;
-      }
+      addAll(list);
     } catch (_) {}
 
     // 2. Direct Anizium API fallback
@@ -145,34 +152,55 @@ class AnimeDetailRemoteDataSourceImpl implements AnimeDetailRemoteDataSource {
           items = (directData['page'] as Map)['data'] as List;
         }
         if (items.isNotEmpty) {
-          return items
+          addAll(items
               .map((item) => AnimeModel.fromJson(item as Map<String, dynamic>))
               .where((item) => item.id.isNotEmpty && item.id != animeId)
-              .toList();
+              .toList());
         }
       }
     } catch (_) {}
 
-    // 3. Fallback: If Anizium has no similar list, provide catalog recommendations
-    try {
-      final fallback = await _dioClient.get(
-        '/api/anizium/top',
-        queryParameters: {'page': 1},
-      );
-      final fbData = fallback.data;
-      if (fbData is Map<String, dynamic>) {
-        final pageData = fbData['page'] ?? fbData;
-        if (pageData is Map<String, dynamic> && pageData['data'] is List) {
-          return (pageData['data'] as List)
-              .map((item) => AnimeModel.fromJson(item as Map<String, dynamic>))
-              .where((item) => item.id.isNotEmpty && item.id != animeId)
-              .take(12)
-              .toList();
+    // 3. If fewer than 6 items, fill up with catalog recommendations
+    if (merged.length < 6) {
+      try {
+        final fallback = await _dioClient.get(
+          '/api/anizium/top',
+          queryParameters: {'page': 1},
+        );
+        final fbData = fallback.data;
+        if (fbData is Map<String, dynamic>) {
+          final pageData = fbData['page'] ?? fbData;
+          if (pageData is Map<String, dynamic> && pageData['data'] is List) {
+            addAll((pageData['data'] as List)
+                .map((item) => AnimeModel.fromJson(item as Map<String, dynamic>))
+                .where((item) => item.id.isNotEmpty && item.id != animeId)
+                .toList());
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
-    return [];
+    // 4. Last resort: more catalog pages so we always have a healthy rail
+    if (merged.length < 6) {
+      try {
+        final catalog = await _dioClient.get(
+          '${ApiConstants.aniziumApiBaseUrl}/page/catalog',
+          queryParameters: {'id': 'series', 'type': 'type', 'page': 1},
+        );
+        final catData = catalog.data;
+        if (catData is Map<String, dynamic>) {
+          final pageData = catData['page'] ?? catData;
+          if (pageData is Map<String, dynamic> && pageData['data'] is List) {
+            addAll((pageData['data'] as List)
+                .map((item) => AnimeModel.fromJson(item as Map<String, dynamic>))
+                .where((item) => item.id.isNotEmpty && item.id != animeId)
+                .toList());
+          }
+        }
+      } catch (_) {}
+    }
+
+    return merged.take(12).toList();
   }
 }
 

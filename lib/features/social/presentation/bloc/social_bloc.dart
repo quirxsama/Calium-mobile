@@ -138,8 +138,8 @@ final class SocialFailureState extends SocialState {
 // ─── BLoC ───────────────────────────────────────────────────────
 
 class SocialBloc extends Bloc<SocialEvent, SocialState> {
-  SocialBloc({required SocialRepository repository})
-      : _repository = repository,
+  SocialBloc({required this._repository})
+      :
         super(SocialInitial()) {
     on<LoadSocialDataRequested>(_onLoad);
     on<SwitchSocialTabRequested>(_onSwitchTab);

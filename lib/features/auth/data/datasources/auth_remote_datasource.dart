@@ -21,8 +21,7 @@ abstract class AuthRemoteDataSource {
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
-  const AuthRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const AuthRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 

@@ -5,8 +5,7 @@ import 'package:calium_stream/features/anime_details/domain/entities/anime_detai
 import 'package:calium_stream/features/anime_details/domain/repositories/anime_detail_repository.dart';
 
 class GetAnimeDetailUseCase {
-  const GetAnimeDetailUseCase({required AnimeDetailRepository repository})
-      : _repository = repository;
+  const GetAnimeDetailUseCase({required this._repository});
 
   final AnimeDetailRepository _repository;
 

@@ -1,4 +1,3 @@
-import 'package:calium_stream/core/constants/api_constants.dart';
 import 'package:calium_stream/core/network/dio_client.dart';
 import 'package:calium_stream/features/library/data/models/favorite_model.dart';
 import 'package:calium_stream/features/library/data/models/history_model.dart';
@@ -11,8 +10,7 @@ abstract class LibraryRemoteDataSource {
 }
 
 class LibraryRemoteDataSourceImpl implements LibraryRemoteDataSource {
-  const LibraryRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const LibraryRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 
@@ -20,7 +18,7 @@ class LibraryRemoteDataSourceImpl implements LibraryRemoteDataSource {
   Future<List<FavoriteModel>> fetchFavoritesFromCloud() async {
     try {
       final response = await _dioClient.get(
-        '${ApiConstants.caliumBackendUrl}/api/sync/favorites',
+        '/api/sync/favorites',
       );
       final data = response.data;
       if (data is Map<String, dynamic> && data['favorites'] is List) {
@@ -38,7 +36,7 @@ class LibraryRemoteDataSourceImpl implements LibraryRemoteDataSource {
   Future<List<HistoryModel>> fetchHistoryFromCloud() async {
     try {
       final response = await _dioClient.get(
-        '${ApiConstants.caliumBackendUrl}/api/sync/history',
+        '/api/sync/history',
       );
       final data = response.data;
       if (data is Map<String, dynamic> && data['history'] is List) {
@@ -56,7 +54,7 @@ class LibraryRemoteDataSourceImpl implements LibraryRemoteDataSource {
   Future<void> syncFavorites(List<FavoriteModel> favorites) async {
     try {
       await _dioClient.post(
-        '${ApiConstants.caliumBackendUrl}/api/sync/favorites',
+        '/api/sync/favorites',
         data: {'favorites': favorites.map((f) => f.toJson()).toList()},
       );
     } catch (_) {
@@ -68,7 +66,7 @@ class LibraryRemoteDataSourceImpl implements LibraryRemoteDataSource {
   Future<void> syncHistory(List<HistoryModel> history) async {
     try {
       await _dioClient.post(
-        '${ApiConstants.caliumBackendUrl}/api/sync/history',
+        '/api/sync/history',
         data: {'history': history.map((h) => h.toJson()).toList()},
       );
     } catch (_) {

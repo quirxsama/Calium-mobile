@@ -6,6 +6,7 @@ class AnimeEntity extends Equatable {
     required this.title,
     required this.posterUrl,
     this.bannerUrl,
+    this.logoUrl,
     this.rating,
     this.currentEpisode,
     this.genres = const [],
@@ -20,6 +21,7 @@ class AnimeEntity extends Equatable {
   final String title;
   final String posterUrl;
   final String? bannerUrl;
+  final String? logoUrl;
   final double? rating;
   final String? currentEpisode;
   final List<String> genres;
@@ -35,6 +37,7 @@ class AnimeEntity extends Equatable {
         title,
         posterUrl,
         bannerUrl,
+        logoUrl,
         rating,
         currentEpisode,
         genres,

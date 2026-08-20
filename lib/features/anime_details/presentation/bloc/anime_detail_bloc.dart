@@ -14,12 +14,10 @@ part 'anime_detail_state.dart';
 
 class AnimeDetailBloc extends Bloc<AnimeDetailEvent, AnimeDetailState> {
   AnimeDetailBloc({
-    required GetAnimeDetailUseCase getAnimeDetailUseCase,
-    required GetCastUseCase getCastUseCase,
-    required AnimeDetailRepository repository,
-  })  : _getAnimeDetailUseCase = getAnimeDetailUseCase,
-        _getCastUseCase = getCastUseCase,
-        _repository = repository,
+    required this._getAnimeDetailUseCase,
+    required this._getCastUseCase,
+    required this._repository,
+  })  :
         super(AnimeDetailInitial()) {
     on<LoadAnimeDetailRequested>(_onLoadAnimeDetail);
     on<SeasonChangedEvent>(_onSeasonChanged);

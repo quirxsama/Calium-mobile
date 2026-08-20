@@ -5,8 +5,7 @@ import 'package:calium_stream/features/auth/domain/entities/user_entity.dart';
 import 'package:calium_stream/features/auth/domain/repositories/auth_repository.dart';
 
 class GetCurrentUserUseCase {
-  const GetCurrentUserUseCase({required AuthRepository repository})
-      : _repository = repository;
+  const GetCurrentUserUseCase({required this._repository});
 
   final AuthRepository _repository;
 

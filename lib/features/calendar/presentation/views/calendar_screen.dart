@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -51,12 +52,34 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     final raw = day.dayName ?? day.title;
-    if (raw.toLowerCase().contains('upcoming_4k')) return 'Yaklaşan 4K';
-    if (raw.toLowerCase().contains('upcoming_trdub')) return 'Yaklaşan Dublaj';
-    if (raw.toLowerCase().contains('upcoming_movie')) return 'Yaklaşan Film';
-    if (raw.toLowerCase().contains('upcoming')) return 'Yaklaşan İçerik';
+    final lower = raw.toLowerCase();
 
-    return raw;
+    // Upcoming slug categories
+    if (lower.contains('upcoming_4k')) return 'Yaklaşan 4K';
+    if (lower.contains('upcoming_trdub')) return 'Yaklaşan Dublaj';
+    if (lower.contains('upcoming_movie')) return 'Yaklaşan Film';
+    if (lower.contains('upcoming')) return 'Yaklaşan İçerik';
+
+    // English day names → Turkish
+    const dayMap = {
+      'monday': 'Pazartesi',
+      'tuesday': 'Salı',
+      'wednesday': 'Çarşamba',
+      'thursday': 'Perşembe',
+      'friday': 'Cuma',
+      'saturday': 'Cumartesi',
+      'sunday': 'Pazar',
+    };
+    for (final entry in dayMap.entries) {
+      if (lower.contains(entry.key)) return entry.value;
+    }
+
+    // Slug cleanup: replace _/- with spaces and capitalize first letter
+    final cleaned = raw
+        .replaceAll(RegExp(r'[_\-]+'), ' ')
+        .trim();
+    if (cleaned.isEmpty) return 'Gün';
+    return cleaned[0].toUpperCase() + cleaned.substring(1);
   }
 
   @override
@@ -151,11 +174,11 @@ class _DayItemsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView.separated(
-      cacheExtent: 500,
+      scrollCacheExtent: ScrollCacheExtent.pixels(500),
       addRepaintBoundaries: true,
       padding: const EdgeInsets.all(AppSpacing.screenPadding),
       itemCount: day.items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
       itemBuilder: (context, index) {
         final item = day.items[index];
         return GestureDetector(

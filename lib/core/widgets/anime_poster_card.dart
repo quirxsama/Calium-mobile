@@ -11,6 +11,7 @@ class AnimePosterCard extends StatelessWidget {
     required this.id,
     required this.title,
     required this.posterUrl,
+    this.fallbackUrls = const [],
     this.episodeBadge,
     this.rating,
     this.onTap,
@@ -21,6 +22,7 @@ class AnimePosterCard extends StatelessWidget {
   final String id;
   final String title;
   final String posterUrl;
+  final List<String> fallbackUrls;
   final String? episodeBadge;
   final double? rating;
   final VoidCallback? onTap;
@@ -42,6 +44,7 @@ class AnimePosterCard extends StatelessWidget {
                 children: [
                   AppCachedImage(
                     imageUrl: posterUrl,
+                    fallbackUrls: fallbackUrls,
                     fit: BoxFit.cover,
                   ),
 

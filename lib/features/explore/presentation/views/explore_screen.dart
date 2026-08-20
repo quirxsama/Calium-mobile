@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -178,7 +179,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           mainAxisSpacing: AppSpacing.md,
         ),
         itemCount: 12,
-        itemBuilder: (_, __) => const ShimmerPlaceholder(),
+        itemBuilder: (_, _) => const ShimmerPlaceholder(),
       );
     }
 
@@ -240,7 +241,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         },
         child: GridView.builder(
           controller: _scrollController,
-          cacheExtent: 600,
+          scrollCacheExtent: ScrollCacheExtent.pixels(600),
           addRepaintBoundaries: true,
           padding: const EdgeInsets.all(AppSpacing.screenPadding),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(

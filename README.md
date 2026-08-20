@@ -5,7 +5,7 @@
 ![Flutter](https://img.shields.io/badge/Flutter-%2302569B.svg?style=for-the-badge&logo=Flutter&logoColor=white)
 ![Dart](https://img.shields.io/badge/dart-%2300B4AB.svg?style=for-the-badge&logo=dart&logoColor=white)
 ![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
-![Version](https://img.shields.io/badge/version-1.0.0--beta.1-green.style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.1.0--beta.1-green.style=for-the-badge)
 
 Calium Mobile is the mobile counterpart to **Calium Web**, offering high-speed anime playback, Netflix-style offline downloading, watch history synchronization, user custom lists, and a sleek dark UI.
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
@@ -81,11 +82,11 @@ class _TopAnimeScreenState extends State<TopAnimeScreen> {
                   ),
                 )
               : ListView.separated(
-                  cacheExtent: 500,
+                  scrollCacheExtent: ScrollCacheExtent.pixels(500),
                   addRepaintBoundaries: true,
                   padding: const EdgeInsets.all(AppSpacing.screenPadding),
                   itemCount: _topAnimes.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+                  separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
                   itemBuilder: (context, index) {
                     final anime = _topAnimes[index];
                     final rank = index + 1;

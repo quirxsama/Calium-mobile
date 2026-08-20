@@ -8,8 +8,8 @@ import 'package:calium_stream/features/home/domain/entities/anime_entity.dart';
 
 class ExploreRepositoryImpl implements ExploreRepository {
   const ExploreRepositoryImpl({
-    required ExploreRemoteDataSource remoteDataSource,
-  }) : _remoteDataSource = remoteDataSource;
+    required this._remoteDataSource,
+  });
 
   final ExploreRemoteDataSource _remoteDataSource;
 

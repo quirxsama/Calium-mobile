@@ -20,5 +20,6 @@ abstract class PlayerRepository {
     required int episodeNumber,
     required Duration position,
     required Duration duration,
+    String episodeThumb = '',
   });
 }

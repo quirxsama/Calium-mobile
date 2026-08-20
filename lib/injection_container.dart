@@ -104,7 +104,10 @@ Future<void> initDependencies() async {
   );
   sl.registerLazySingleton(() => GetHomeFeedUseCase(repository: sl()));
   sl.registerFactory(
-    () => HomeBloc(getHomeFeed: sl()),
+    () => HomeBloc(
+      getHomeFeed: sl(),
+      getAnimeDetailUseCase: sl(),
+    ),
   );
 
   // ─── Explore ──────────────────────────────────────────────

@@ -12,8 +12,7 @@ abstract class PlayerRemoteDataSource {
 }
 
 class PlayerRemoteDataSourceImpl implements PlayerRemoteDataSource {
-  const PlayerRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const PlayerRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 

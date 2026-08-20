@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:go_router/go_router.dart';
 
 import 'package:calium_stream/core/theme/app_spacing.dart';
@@ -43,16 +44,23 @@ class AnimeRail extends StatelessWidget {
               horizontal: AppSpacing.screenPadding,
             ),
             scrollDirection: Axis.horizontal,
-            cacheExtent: 500,
+            scrollCacheExtent: ScrollCacheExtent.pixels(500),
             addRepaintBoundaries: true,
             itemCount: animes.length,
-            separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.md),
+            separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.md),
             itemBuilder: (context, index) {
               final anime = animes[index];
+              final fallbacks = [
+                if (anime.bannerUrl != null && anime.bannerUrl!.isNotEmpty)
+                  anime.bannerUrl!,
+                if (anime.logoUrl != null && anime.logoUrl!.isNotEmpty)
+                  anime.logoUrl!,
+              ];
               return AnimePosterCard(
                 id: anime.id,
                 title: anime.title,
                 posterUrl: anime.posterUrl,
+                fallbackUrls: fallbacks,
                 rating: anime.rating,
                 episodeBadge: anime.currentEpisode,
                 width: AppSpacing.posterWidth,

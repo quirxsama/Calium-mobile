@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,6 +8,7 @@ import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/glass_container.dart';
 import 'package:calium_stream/core/widgets/shimmer_placeholder.dart';
+import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
 import 'package:calium_stream/features/home/presentation/bloc/home_bloc.dart';
 import 'package:calium_stream/features/home/presentation/widgets/anime_rail.dart';
 import 'package:calium_stream/features/home/presentation/widgets/continue_watching_section.dart';
@@ -14,14 +16,38 @@ import 'package:calium_stream/features/home/presentation/widgets/hero_carousel.d
 import 'package:calium_stream/features/home/presentation/widgets/random_anime_card.dart';
 import 'package:calium_stream/features/home/presentation/widgets/top_ranked_rail.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _didOfflineRedirect = false;
+
+  void _handleOfflineRedirect(HomeState state) {
+    if (state is HomeLoading || state is HomeInitial) {
+      _didOfflineRedirect = false;
+      return;
+    }
+    if (state is! HomeFailureState || _didOfflineRedirect) return;
+    final hasDownloaded = DownloadService.instance.currentTasks
+        .any((t) => t.status == DownloadStatus.completed);
+    if (!hasDownloaded) return;
+    _didOfflineRedirect = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.go('/downloads');
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: BlocBuilder<HomeBloc, HomeState>(
+      body: BlocListener<HomeBloc, HomeState>(
+        listener: (context, state) => _handleOfflineRedirect(state),
+        child: BlocBuilder<HomeBloc, HomeState>(
         builder: (context, state) {
           if (state is HomeLoading || state is HomeInitial) {
             return _buildLoadingSkeleton();
@@ -46,7 +72,7 @@ class HomeScreen extends StatelessWidget {
                 context.read<HomeBloc>().add(RefreshHomeFeedRequested());
               },
               child: CustomScrollView(
-                cacheExtent: 800,
+                scrollCacheExtent: ScrollCacheExtent.pixels(800),
                 physics: const AlwaysScrollableScrollPhysics(
                   parent: BouncingScrollPhysics(),
                 ),
@@ -303,6 +329,7 @@ class HomeScreen extends StatelessWidget {
 
           return const SizedBox.shrink();
         },
+      ),
       ),
     );
   }

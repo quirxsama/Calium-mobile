@@ -146,7 +146,7 @@ class _UserSearchSheetState extends State<UserSearchSheet> {
                       )
                     : ListView.separated(
                         itemCount: _results.length,
-                        separatorBuilder: (_, __) => const Divider(color: AppColors.border, height: 1),
+                        separatorBuilder: (_, _) => const Divider(color: AppColors.border, height: 1),
                         itemBuilder: (context, index) {
                           final u = _results[index];
                           final isFollowing = u.followStatus == 'following' || u.followStatus == 'friends';

@@ -8,8 +8,7 @@ import 'package:calium_stream/features/home/domain/entities/home_feed_entity.dar
 import 'package:calium_stream/features/home/domain/repositories/home_repository.dart';
 
 class HomeRepositoryImpl implements HomeRepository {
-  const HomeRepositoryImpl({required HomeRemoteDataSource remoteDataSource})
-      : _remoteDataSource = remoteDataSource;
+  const HomeRepositoryImpl({required this._remoteDataSource});
 
   final HomeRemoteDataSource _remoteDataSource;
 

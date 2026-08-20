@@ -3,8 +3,8 @@ import 'package:calium_stream/features/profile/domain/repositories/profile_repos
 import 'package:calium_stream/features/profile/presentation/cubit/profile_state.dart';
 
 class ProfileCubit extends Cubit<ProfileState> {
-  ProfileCubit({required ProfileRepository repository})
-      : _repository = repository,
+  ProfileCubit({required this._repository})
+      :
         super(ProfileInitial());
 
   final ProfileRepository _repository;

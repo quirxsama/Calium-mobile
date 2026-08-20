@@ -40,7 +40,7 @@ class CastCarousel extends StatelessWidget {
             ),
             scrollDirection: Axis.horizontal,
             itemCount: cast.length,
-            separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.lg),
+            separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.lg),
             itemBuilder: (context, index) {
               final member = cast[index];
 

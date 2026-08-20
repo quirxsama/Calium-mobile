@@ -6,8 +6,7 @@ import 'package:calium_stream/features/profile/domain/entities/user_profile_enti
 import 'package:calium_stream/features/profile/domain/repositories/profile_repository.dart';
 
 class ProfileRepositoryImpl implements ProfileRepository {
-  const ProfileRepositoryImpl({required ProfileRemoteDataSource remoteDataSource})
-      : _remoteDataSource = remoteDataSource;
+  const ProfileRepositoryImpl({required this._remoteDataSource});
 
   final ProfileRemoteDataSource _remoteDataSource;
 

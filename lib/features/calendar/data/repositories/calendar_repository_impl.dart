@@ -6,8 +6,7 @@ import 'package:calium_stream/features/calendar/domain/entities/calendar_day_ent
 import 'package:calium_stream/features/calendar/domain/repositories/calendar_repository.dart';
 
 class CalendarRepositoryImpl implements CalendarRepository {
-  const CalendarRepositoryImpl({required CalendarRemoteDataSource remoteDataSource})
-      : _remoteDataSource = remoteDataSource;
+  const CalendarRepositoryImpl({required this._remoteDataSource});
 
   final CalendarRemoteDataSource _remoteDataSource;
 

@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
-import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/glass_container.dart';
 import 'package:calium_stream/features/home/domain/entities/anime_entity.dart';
 

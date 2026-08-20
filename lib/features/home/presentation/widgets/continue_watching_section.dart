@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -9,6 +10,7 @@ import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/core/utils/episode_utils.dart';
 import 'package:calium_stream/core/widgets/section_header.dart';
 import 'package:calium_stream/features/home/domain/entities/anime_entity.dart';
+import 'package:calium_stream/features/library/presentation/bloc/library_bloc.dart';
 
 class ContinueWatchingSection extends StatelessWidget {
   const ContinueWatchingSection({
@@ -25,12 +27,24 @@ class ContinueWatchingSection extends StatelessWidget {
       builder: (context, Box box, _) {
         // Collect watch history entries from Hive
         final List<Map<String, dynamic>> historyItems = [];
-        for (var i = box.length - 1; i >= 0; i--) {
-          final val = box.getAt(i);
+        for (final val in box.values) {
           if (val is Map) {
             historyItems.add(Map<String, dynamic>.from(val));
           }
         }
+
+        // Most recently watched first
+        historyItems.sort((a, b) {
+          int toEpochMs(dynamic v) {
+            if (v is num) return v.toInt();
+            if (v is String) {
+              return DateTime.tryParse(v)?.millisecondsSinceEpoch ?? 0;
+            }
+            return 0;
+          }
+
+          return toEpochMs(b['updatedAt']).compareTo(toEpochMs(a['updatedAt']));
+        });
 
         if (historyItems.isEmpty && items.isEmpty) {
           return const SizedBox.shrink();
@@ -56,14 +70,16 @@ class ContinueWatchingSection extends StatelessWidget {
                 ),
                 scrollDirection: Axis.horizontal,
                 itemCount: historyItems.isNotEmpty ? historyItems.length : items.length,
-                separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.md),
+                separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.md),
                 itemBuilder: (context, index) {
                   if (historyItems.isNotEmpty) {
                     final item = historyItems[index];
                     final animeId = item['animeId']?.toString() ?? '';
                     final animeName = item['animeName']?.toString() ?? 'Anime';
                     final poster = item['poster']?.toString() ?? item['posterUrl']?.toString() ?? '';
-                    final progress = (item['progress'] as num?)?.toDouble() ?? 0.0;
+                    final episodeThumb = item['episodeThumb']?.toString() ?? '';
+                    final rawProgress = (item['progress'] as num?)?.toDouble() ?? 0.0;
+                    final progress = (rawProgress > 1.0 ? rawProgress / 100.0 : rawProgress).clamp(0.0, 1.0);
                     final epNum = int.tryParse(item['episodeNumber']?.toString() ?? '') ?? 1;
                     final sNum = int.tryParse(item['seasonNumber']?.toString() ?? '') ?? 1;
                     final episodeName = EpisodeUtils.formatEpisodeLabel(
@@ -75,9 +91,10 @@ class ContinueWatchingSection extends StatelessWidget {
                     return GestureDetector(
                       onTap: () {
                         context.push(
-                          '/watch/$animeId?title=${Uri.encodeComponent(animeName)}&episode=${Uri.encodeComponent(episodeName)}&ep=$epNum&s=$sNum',
+                          '/watch/$animeId?title=${Uri.encodeComponent(animeName)}&episode=${Uri.encodeComponent(episodeName)}&ep=$epNum&s=$sNum&poster=${Uri.encodeComponent(poster)}',
                         );
                       },
+                      onLongPress: () => _showRemoveDialog(context, animeId, animeName),
                       child: SizedBox(
                         width: 220,
                         child: Column(
@@ -92,8 +109,10 @@ class ContinueWatchingSection extends StatelessWidget {
                                 child: Stack(
                                   fit: StackFit.expand,
                                   children: [
+                                    // Prefer the last watched episode thumbnail over the anime poster
                                     AppCachedImage(
-                                      imageUrl: poster,
+                                      imageUrl: episodeThumb.isNotEmpty ? episodeThumb : poster,
+                                      fallbackUrls: episodeThumb.isNotEmpty ? [poster] : const [],
                                       fit: BoxFit.cover,
                                     ),
 
@@ -224,6 +243,41 @@ class ContinueWatchingSection extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+
+  void _showRemoveDialog(BuildContext context, String animeId, String animeName) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        title: const Text(
+          'Geçmişten Kaldır',
+          style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          '"$animeName" izleme geçmişinden kaldırılsın mı?',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              context.read<LibraryBloc>().add(
+                    RemoveHistoryItemRequested(animeId: animeId),
+                  );
+            },
+            child: const Text(
+              'Kaldır',
+              style: TextStyle(color: AppColors.accentCrimson, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

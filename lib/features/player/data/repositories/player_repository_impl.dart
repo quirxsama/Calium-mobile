@@ -9,8 +9,8 @@ import 'package:calium_stream/features/player/domain/repositories/player_reposit
 
 class PlayerRepositoryImpl implements PlayerRepository {
   const PlayerRepositoryImpl({
-    required PlayerRemoteDataSource remoteDataSource,
-  }) : _remoteDataSource = remoteDataSource;
+    required this._remoteDataSource,
+  });
 
   final PlayerRemoteDataSource _remoteDataSource;
 
@@ -47,17 +47,41 @@ class PlayerRepositoryImpl implements PlayerRepository {
     required int episodeNumber,
     required Duration position,
     required Duration duration,
+    String episodeThumb = '',
   }) async {
     try {
       final box = Hive.box('history');
+      final existing = box.get(animeId);
+      final existingMap = existing is Map ? existing : null;
+
+      // Guard against corrupting saved progress during startup (e.g. 0-3s positions)
+      if (position.inSeconds <= 3 && existingMap != null) {
+        final existingPos = (existingMap['positionMs'] as num?)?.toInt() ?? 0;
+        final existingEp = (existingMap['episodeNumber'] as num?)?.toInt() ?? 1;
+        final existingSeason = (existingMap['seasonNumber'] as num?)?.toInt() ?? 1;
+        if (existingEp == episodeNumber && existingSeason == seasonNumber && existingPos > 5000) {
+          return;
+        }
+      }
+
       final progress = duration.inMilliseconds > 0
           ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0)
           : 0.0;
+      final effectivePoster = posterUrl.isNotEmpty
+          ? posterUrl
+          : (existingMap?['poster']?.toString() ?? '');
+      final effectiveTitle = animeTitle.isNotEmpty
+          ? animeTitle
+          : (existingMap?['animeName']?.toString() ?? '');
+      final effectiveThumb = episodeThumb.isNotEmpty
+          ? episodeThumb
+          : (existingMap?['episodeThumb']?.toString() ?? '');
 
       await box.put(animeId, {
         'animeId': animeId,
-        'animeName': animeTitle,
-        'poster': posterUrl,
+        'animeName': effectiveTitle,
+        'poster': effectivePoster,
+        'episodeThumb': effectiveThumb,
         'episodeId': episodeId,
         'episodeName': episodeTitle,
         'seasonNumber': seasonNumber,
@@ -65,8 +89,14 @@ class PlayerRepositoryImpl implements PlayerRepository {
         'progress': progress,
         'positionMs': position.inMilliseconds,
         'duration': duration.inSeconds,
-        'updatedAt': DateTime.now().toIso8601String(),
+        'updatedAt': DateTime.now().millisecondsSinceEpoch,
+        'dirty': true,
       });
+
+      // Watching again revives a previously removed history item
+      try {
+        await Hive.box('history_deleted').delete(animeId);
+      } catch (_) {}
     } catch (_) {
       // Local history save is best-effort
     }

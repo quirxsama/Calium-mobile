@@ -34,7 +34,9 @@ void main() async {
 
   // Open Hive boxes for offline data
   await Hive.openBox('favorites');
+  await Hive.openBox('favorites_deleted');
   await Hive.openBox('history');
+  await Hive.openBox('history_deleted');
   await Hive.openBox('preferences');
 
   // Initialize download service and restore offline download queue

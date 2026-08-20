@@ -13,6 +13,7 @@ class HistoryModel extends HistoryEntity {
     required super.progress,
     required super.duration,
     required super.updatedAt,
+    super.episodeThumb = '',
   });
 
   factory HistoryModel.fromJson(Map<String, dynamic> json) {
@@ -39,6 +40,7 @@ class HistoryModel extends HistoryEntity {
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
       duration: (json['duration'] as num?)?.toInt() ?? 0,
       updatedAt: parsedDate,
+      episodeThumb: json['episodeThumb'] as String? ?? '',
     );
   }
 
@@ -54,6 +56,7 @@ class HistoryModel extends HistoryEntity {
       'progress': progress,
       'duration': duration,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
+      if (episodeThumb.isNotEmpty) 'episodeThumb': episodeThumb,
     };
   }
 }

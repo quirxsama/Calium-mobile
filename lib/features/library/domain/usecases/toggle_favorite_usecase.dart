@@ -5,8 +5,7 @@ import 'package:calium_stream/features/library/domain/entities/favorite_entity.d
 import 'package:calium_stream/features/library/domain/repositories/library_repository.dart';
 
 class ToggleFavoriteUseCase {
-  const ToggleFavoriteUseCase({required LibraryRepository repository})
-      : _repository = repository;
+  const ToggleFavoriteUseCase({required this._repository});
 
   final LibraryRepository _repository;
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
@@ -148,9 +149,9 @@ class _InPlayerEpisodesSheetState extends State<InPlayerEpisodesSheet> {
                   )
                 : ListView.separated(
                     controller: _scrollController,
-                    cacheExtent: 500,
+                    scrollCacheExtent: ScrollCacheExtent.pixels(500),
                     itemCount: filteredEpisodes.length,
-                    separatorBuilder: (_, __) => const Divider(color: AppColors.border, height: 1),
+                    separatorBuilder: (_, _) => const Divider(color: AppColors.border, height: 1),
                     itemBuilder: (context, index) {
                       final ep = filteredEpisodes[index];
                       final isCurrent = ep.episodeNumber == widget.currentEpisodeNumber;

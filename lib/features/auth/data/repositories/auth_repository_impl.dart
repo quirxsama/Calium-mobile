@@ -10,10 +10,9 @@ import 'package:calium_stream/features/auth/domain/repositories/auth_repository.
 
 class AuthRepositoryImpl implements AuthRepository {
   const AuthRepositoryImpl({
-    required AuthRemoteDataSource remoteDataSource,
-    required FlutterSecureStorage secureStorage,
-  })  : _remoteDataSource = remoteDataSource,
-        _secureStorage = secureStorage;
+    required this._remoteDataSource,
+    required this._secureStorage,
+  });
 
   final AuthRemoteDataSource _remoteDataSource;
   final FlutterSecureStorage _secureStorage;

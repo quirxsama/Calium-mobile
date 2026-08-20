@@ -74,8 +74,8 @@ final class PlayerError extends PlayerState {
 }
 
 class PlayerCubit extends Cubit<PlayerState> {
-  PlayerCubit({required GetVideoSourcesUseCase getVideoSourcesUseCase})
-      : _getVideoSourcesUseCase = getVideoSourcesUseCase,
+  PlayerCubit({required this._getVideoSourcesUseCase})
+      :
         super(PlayerInitial());
 
   final GetVideoSourcesUseCase _getVideoSourcesUseCase;

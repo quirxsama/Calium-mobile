@@ -13,8 +13,7 @@ abstract class HomeRemoteDataSource {
 }
 
 class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
-  const HomeRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const HomeRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 

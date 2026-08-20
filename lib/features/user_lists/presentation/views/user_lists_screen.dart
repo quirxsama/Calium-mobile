@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -119,6 +120,41 @@ class _ListGrid extends StatelessWidget {
   final List<UserListEntity> lists;
   final bool isMyLists;
 
+  void _showDeleteListDialog(BuildContext context, UserListEntity list) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        title: const Text(
+          'Listeyi Sil',
+          style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          '"${list.name}" listesi kalıcı olarak silinecek. Devam edilsin mi?',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              context.read<UserListsBloc>().add(
+                    DeleteUserListRequested(listId: list.id),
+                  );
+            },
+            child: const Text(
+              'Sil',
+              style: TextStyle(color: AppColors.accentCrimson, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (lists.isEmpty) {
@@ -131,11 +167,11 @@ class _ListGrid extends StatelessWidget {
     }
 
     return ListView.separated(
-      cacheExtent: 500,
+      scrollCacheExtent: ScrollCacheExtent.pixels(500),
       addRepaintBoundaries: true,
       padding: const EdgeInsets.all(AppSpacing.screenPadding),
       itemCount: lists.length,
-      separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
       itemBuilder: (context, index) {
         final list = lists[index];
         final firstPoster = list.items.isNotEmpty ? list.items.first.poster : null;
@@ -144,6 +180,7 @@ class _ListGrid extends StatelessWidget {
           onTap: () {
             context.push('/lists/${list.id}');
           },
+          onLongPress: isMyLists ? () => _showDeleteListDialog(context, list) : null,
           child: Container(
             padding: const EdgeInsets.all(AppSpacing.cardPadding),
             decoration: BoxDecoration(

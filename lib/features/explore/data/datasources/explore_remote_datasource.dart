@@ -12,8 +12,7 @@ abstract class ExploreRemoteDataSource {
 }
 
 class ExploreRemoteDataSourceImpl implements ExploreRemoteDataSource {
-  const ExploreRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const ExploreRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 

@@ -13,19 +13,17 @@ part 'library_state.dart';
 
 class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
   LibraryBloc({
-    required GetFavoritesUseCase getFavoritesUseCase,
-    required GetHistoryUseCase getHistoryUseCase,
-    required ToggleFavoriteUseCase toggleFavoriteUseCase,
-    required LibraryRepository libraryRepository,
-  })  : _getFavoritesUseCase = getFavoritesUseCase,
-        _getHistoryUseCase = getHistoryUseCase,
-        _toggleFavoriteUseCase = toggleFavoriteUseCase,
-        _libraryRepository = libraryRepository,
+    required this._getFavoritesUseCase,
+    required this._getHistoryUseCase,
+    required this._toggleFavoriteUseCase,
+    required this._libraryRepository,
+  })  :
         super(LibraryInitial()) {
     on<LoadLibraryRequested>(_onLoadLibrary);
     on<SyncRequested>(_onSync);
     on<ToggleFavoriteRequested>(_onToggleFavorite);
     on<ClearHistoryRequested>(_onClearHistory);
+    on<RemoveHistoryItemRequested>(_onRemoveHistoryItem);
   }
 
   final GetFavoritesUseCase _getFavoritesUseCase;
@@ -66,8 +64,26 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
     ToggleFavoriteRequested event,
     Emitter<LibraryState> emit,
   ) async {
-    await _toggleFavoriteUseCase(event.favorite);
-    add(LoadLibraryRequested());
+    final result = await _toggleFavoriteUseCase(event.favorite);
+    if (state is LibraryLoaded) {
+      final current = state as LibraryLoaded;
+      result.fold(
+        (_) => null,
+        (isNowFavorite) {
+          if (isNowFavorite) {
+            emit(current.copyWith(
+              favorites: [event.favorite, ...current.favorites],
+            ));
+          } else {
+            emit(current.copyWith(
+              favorites: current.favorites
+                  .where((f) => f.animeId != event.favorite.animeId)
+                  .toList(),
+            ));
+          }
+        },
+      );
+    }
   }
 
   Future<void> _onClearHistory(
@@ -77,6 +93,21 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
     await _libraryRepository.clearHistory();
     if (state is LibraryLoaded) {
       emit((state as LibraryLoaded).copyWith(history: []));
+    }
+  }
+
+  Future<void> _onRemoveHistoryItem(
+    RemoveHistoryItemRequested event,
+    Emitter<LibraryState> emit,
+  ) async {
+    await _libraryRepository.removeHistoryItem(event.animeId);
+    if (state is LibraryLoaded) {
+      final current = state as LibraryLoaded;
+      emit(current.copyWith(
+        history: current.history
+            .where((h) => h.animeId != event.animeId)
+            .toList(),
+      ));
     }
   }
 }

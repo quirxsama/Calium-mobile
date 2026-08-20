@@ -10,3 +10,12 @@ sealed class HomeEvent extends Equatable {
 final class LoadHomeFeedRequested extends HomeEvent {}
 
 final class RefreshHomeFeedRequested extends HomeEvent {}
+
+final class UpdateHeroItemsRequested extends HomeEvent {
+  const UpdateHeroItemsRequested({required this.trending});
+
+  final List<AnimeEntity> trending;
+
+  @override
+  List<Object?> get props => [trending];
+}

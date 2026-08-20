@@ -104,8 +104,8 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   bool _autoNextEpisode = true;
   int _autoNextCountdown = 5;
   Timer? _autoNextTimer;
-
   Timer? _controlsTimer;
+
   Duration _position = Duration.zero;
   final ValueNotifier<Duration> _positionNotifier = ValueNotifier<Duration>(Duration.zero);
   Duration _duration = Duration.zero;
@@ -116,8 +116,17 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   List<EpisodeEntity> _seasonEpisodes = [];
   bool _isDismissedNextEpPrompt = false;
   int _initialSeekMs = 0;
+  Duration? _initialResumeTarget;
+  Timer? _resumeSafetyTimer;
+  bool _introSkipped = false;
 
   final List<StreamSubscription> _subscriptions = [];
+
+  void _cancelInitialResume() {
+    _initialResumeTarget = null;
+    _resumeSafetyTimer?.cancel();
+    _resumeSafetyTimer = null;
+  }
 
   @override
   void initState() {
@@ -134,9 +143,20 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
         final epNum = int.tryParse(saved['episodeNumber']?.toString() ?? '');
         if (sNum == _currentSeasonNumber && epNum == _currentEpisodeNumber) {
-          final posMs = saved['positionMs'] as int? ?? 0;
+          var posMs = (saved['positionMs'] as num?)?.toInt() ?? 0;
+          if (posMs <= 0) {
+            final progress = (saved['progress'] as num?)?.toDouble() ?? 0.0;
+            final durationSec = (saved['duration'] as num?)?.toInt() ?? 0;
+            if (progress > 0 && durationSec > 0) {
+              posMs = (progress * durationSec * 1000).round();
+            }
+          }
           if (posMs > 3000) {
             _initialSeekMs = posMs;
+            _initialResumeTarget = Duration(milliseconds: posMs);
+            _resumeSafetyTimer = Timer(const Duration(seconds: 10), () {
+              _initialResumeTarget = null;
+            });
           }
         }
       }
@@ -156,13 +176,38 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _player.stream.position.listen((pos) {
         _position = pos;
         _positionNotifier.value = pos;
-        // Save progress every 5s
-        if (pos.inSeconds > 0 && pos.inSeconds % 5 == 0) {
+
+        // If we have an active initial resume target:
+        if (_initialResumeTarget != null) {
+          final target = _initialResumeTarget!;
+          if (_duration > Duration.zero && pos.inSeconds < target.inSeconds - 3) {
+            // Codec reset to 0:00 (due to Android surface resize / decoder reload), re-seek!
+            _player.seek(target);
+          } else if (pos >= target - const Duration(seconds: 2)) {
+            // Player stabilized at target position
+            _resumeSafetyTimer?.cancel();
+            _resumeSafetyTimer = Timer(const Duration(seconds: 2), () {
+              _initialResumeTarget = null;
+            });
+          }
+        }
+
+        // Save progress every 5s if user is not in initial resume loading phase
+        if (_initialResumeTarget == null && pos.inSeconds >= 4 && pos.inSeconds % 5 == 0) {
           _saveCurrentProgress(pos);
         }
       }),
       _player.stream.duration.listen((dur) {
         if (mounted) setState(() => _duration = dur);
+        if (_initialResumeTarget != null && dur > Duration.zero) {
+          final target = _initialResumeTarget!;
+          if (_position.inSeconds < target.inSeconds - 3) {
+            final clamped = target > dur ? dur - const Duration(seconds: 5) : target;
+            if (clamped > Duration.zero) {
+              _player.seek(clamped);
+            }
+          }
+        }
       }),
       _player.stream.buffer.listen((buf) {
         if (mounted) setState(() => _buffer = buf);
@@ -170,7 +215,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _player.stream.playing.listen((playing) {
         if (mounted) {
           setState(() => _isPlaying = playing);
-          if (!playing && _position.inSeconds > 0) {
+          if (!playing && _initialResumeTarget == null && _position.inSeconds >= 4) {
             _saveCurrentProgress(_position);
           }
         }
@@ -200,7 +245,17 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   }
 
   void _saveCurrentProgress(Duration pos) {
-    if (pos.inSeconds == 0) return;
+    if (pos.inSeconds < 4) return;
+    String episodeThumb = '';
+    try {
+      for (final ep in _seasonEpisodes) {
+        if (ep.seasonNumber == _currentSeasonNumber &&
+            ep.episodeNumber == _currentEpisodeNumber) {
+          episodeThumb = ep.thumbnailUrl ?? '';
+          break;
+        }
+      }
+    } catch (_) {}
     GetIt.I<PlayerRepository>().saveWatchProgress(
       animeId: widget.animeId,
       animeTitle: widget.animeTitle,
@@ -211,6 +266,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       episodeNumber: _currentEpisodeNumber,
       position: pos,
       duration: _duration,
+      episodeThumb: episodeThumb,
     );
   }
 
@@ -232,11 +288,27 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   Future<void> _playStream(String url, SubtitleTrackEntity? subtitle) async {
     if (url.isEmpty || url == _currentStreamUrl) return;
     final lastPos = _position;
+    final wasPlaying = _isPlaying;
+    final isFirstLoad = _currentStreamUrl.isEmpty;
     _currentStreamUrl = url;
+    _introSkipped = false;
+
+    // Determine the target seek position
+    Duration? seekTarget;
+    if (lastPos.inSeconds > 5) {
+      seekTarget = lastPos;
+      _initialResumeTarget = lastPos;
+    } else if (_initialSeekMs > 3000) {
+      seekTarget = Duration(milliseconds: _initialSeekMs);
+      _initialResumeTarget = seekTarget;
+      _initialSeekMs = 0;
+    } else if (_initialResumeTarget != null) {
+      seekTarget = _initialResumeTarget;
+    }
 
     final isLocal = url.startsWith('/') || url.startsWith('file://');
     final media = isLocal
-        ? Media(url)
+        ? Media(url, start: seekTarget)
         : Media(
             url,
             httpHeaders: {
@@ -244,15 +316,10 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
               'Origin': ApiConstants.origin,
               'User-Agent': ApiConstants.userAgent,
             },
+            start: seekTarget,
           );
 
-    await _player.open(media);
-    if (lastPos.inSeconds > 5) {
-      await _player.seek(lastPos);
-    } else if (_initialSeekMs > 3000) {
-      await _player.seek(Duration(milliseconds: _initialSeekMs));
-      _initialSeekMs = 0;
-    }
+    await _player.open(media, play: isFirstLoad || wasPlaying);
 
     if (subtitle != null && subtitle.url.isNotEmpty) {
       await _player.setSubtitleTrack(
@@ -262,6 +329,11 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           language: subtitle.group,
         ),
       );
+    }
+
+    // Explicit seek after subtitle setup & media open
+    if (seekTarget != null && seekTarget.inMilliseconds > 3000) {
+      await _player.seek(seekTarget);
     }
   }
 
@@ -293,6 +365,29 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     _autoNextTimer?.cancel();
     _autoNextTimer = null;
 
+    int savedSeekMs = 0;
+    try {
+      final box = Hive.box('history');
+      final saved = box.get(widget.animeId);
+      if (saved is Map) {
+        final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
+        final epNum = int.tryParse(saved['episodeNumber']?.toString() ?? '');
+        if (sNum == season && epNum == episode) {
+          var posMs = (saved['positionMs'] as num?)?.toInt() ?? 0;
+          if (posMs <= 0) {
+            final progress = (saved['progress'] as num?)?.toDouble() ?? 0.0;
+            final durationSec = (saved['duration'] as num?)?.toInt() ?? 0;
+            if (progress > 0 && durationSec > 0) {
+              posMs = (progress * durationSec * 1000).round();
+            }
+          }
+          if (posMs > 3000) {
+            savedSeekMs = posMs;
+          }
+        }
+      }
+    } catch (_) {}
+
     setState(() {
       _currentSeasonNumber = season;
       _currentEpisodeNumber = episode;
@@ -303,7 +398,17 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _currentStreamUrl = '';
       _isDismissedNextEpPrompt = false;
       _showControls = true;
+      _initialSeekMs = savedSeekMs;
+      _initialResumeTarget = savedSeekMs > 3000 ? Duration(milliseconds: savedSeekMs) : null;
+      _introSkipped = false;
     });
+
+    _resumeSafetyTimer?.cancel();
+    if (_initialResumeTarget != null) {
+      _resumeSafetyTimer = Timer(const Duration(seconds: 10), () {
+        _initialResumeTarget = null;
+      });
+    }
 
     _player.stop();
     _loadSeasonEpisodes();
@@ -537,10 +642,12 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                     initialVolume: _volume,
                     onTap: _toggleControls,
                     onDoubleTapLeft: (seconds) {
+                      _cancelInitialResume();
                       _player.seek(_position - Duration(seconds: seconds));
                       _resetControlsTimer();
                     },
                     onDoubleTapRight: (seconds) {
+                      _cancelInitialResume();
                       _player.seek(_position + Duration(seconds: seconds));
                       _resetControlsTimer();
                     },
@@ -562,6 +669,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                       setState(() => _volume = val);
                     },
                     onSeek: (targetPos) {
+                      _cancelInitialResume();
                       _player.seek(targetPos);
                       _resetControlsTimer();
                     },
@@ -593,7 +701,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                   Positioned.fill(
                     child: IgnorePointer(
                       child: Container(
-                        color: Colors.black.withOpacity((1.0 - _brightness) * 0.85),
+                        color: Colors.black.withValues(alpha: (1.0 - _brightness) * 0.85),
                       ),
                     ),
                   ),
@@ -612,7 +720,11 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                       final currentSec = pos.inSeconds;
 
                       // Auto Skip Intro trigger
-                      if (_autoSkipIntro && currentSec >= introStart && currentSec <= introStart + 2) {
+                      if (_autoSkipIntro &&
+                          !_introSkipped &&
+                          currentSec >= introStart &&
+                          currentSec <= introStart + 2) {
+                        _introSkipped = true;
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           _player.seek(Duration(seconds: introEnd));
                         });
@@ -768,18 +880,22 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                         _resetControlsTimer();
                       },
                       onSeekForward: () {
+                        _cancelInitialResume();
                         _player.seek(_position + const Duration(seconds: 10));
                         _resetControlsTimer();
                       },
                       onSeekBackward: () {
+                        _cancelInitialResume();
                         _player.seek(_position - const Duration(seconds: 10));
                         _resetControlsTimer();
                       },
                       onSeek: (val) {
+                        _cancelInitialResume();
                         _player.seek(val);
                         _resetControlsTimer();
                       },
                       onSeekStart: () {
+                        _cancelInitialResume();
                         _controlsTimer?.cancel();
                       },
                       onSeekEnd: () {

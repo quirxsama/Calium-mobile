@@ -8,8 +8,8 @@ import 'package:calium_stream/features/social/domain/repositories/social_reposit
 
 class SocialRepositoryImpl implements SocialRepository {
   const SocialRepositoryImpl({
-    required SocialRemoteDataSource remoteDataSource,
-  }) : _remoteDataSource = remoteDataSource;
+    required this._remoteDataSource,
+  });
 
   final SocialRemoteDataSource _remoteDataSource;
 

@@ -105,8 +105,8 @@ final class ExploreFailureState extends ExploreState {
 // ─── BLoC ───────────────────────────────────────────────────────
 
 class ExploreBloc extends Bloc<ExploreEvent, ExploreState> {
-  ExploreBloc({required GetExploreCatalogUseCase getExploreCatalogUseCase})
-      : _getExploreCatalogUseCase = getExploreCatalogUseCase,
+  ExploreBloc({required this._getExploreCatalogUseCase})
+      :
         super(ExploreInitial()) {
     on<LoadExploreCatalogRequested>(_onLoad);
     on<ChangeExploreCategoryRequested>(_onChangeCategory);

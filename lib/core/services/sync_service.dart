@@ -8,10 +8,9 @@ import 'package:calium_stream/features/auth/domain/entities/user_entity.dart';
 
 class SyncService with WidgetsBindingObserver {
   SyncService({
-    required SyncRemoteDataSource remoteDataSource,
-    required FlutterSecureStorage secureStorage,
-  })  : _remoteDataSource = remoteDataSource,
-        _secureStorage = secureStorage;
+    required this._remoteDataSource,
+    required this._secureStorage,
+  });
 
   final SyncRemoteDataSource _remoteDataSource;
   final FlutterSecureStorage _secureStorage;
@@ -89,70 +88,137 @@ class SyncService with WidgetsBindingObserver {
     try {
       final historyBox = Hive.box('history');
 
-      // A. Prepare local history items to upload to server
+      int toEpochMs(dynamic v) {
+        if (v is num) return v.toInt();
+        if (v is String) {
+          return DateTime.tryParse(v)?.millisecondsSinceEpoch ?? 0;
+        }
+        return 0;
+      }
+
+      double normalizeProgress(dynamic v) {
+        final raw = (v as num?)?.toDouble() ?? 0.0;
+        final p = raw > 1.0 ? raw / 100.0 : raw;
+        return p.clamp(0.0, 1.0);
+      }
+
+      // A. Prepare only locally changed (dirty) history items to upload
       final List<Map<String, dynamic>> localItemsToUpload = [];
       for (final key in historyBox.keys) {
         final val = historyBox.get(key);
-        if (val is Map) {
-          final map = Map<String, dynamic>.from(val);
-          final animeId = map['animeId']?.toString() ?? key.toString();
-          final animeName = map['animeName']?.toString() ?? map['title']?.toString() ?? 'Anime';
-          final episodeId = map['episodeId']?.toString() ?? 'ep-1';
-          final episodeName = map['episodeName']?.toString() ?? 'Bölüm 1';
-          final poster = map['poster']?.toString() ?? map['posterPath']?.toString();
-          final episodeNumber = (map['episodeNumber'] as num?)?.toInt() ?? (map['episode'] as num?)?.toInt();
-          final seasonNumber = (map['seasonNumber'] as num?)?.toInt() ?? (map['season'] as num?)?.toInt();
-          final progress = (map['progress'] as num?)?.toDouble() ?? (map['position'] as num?)?.toDouble() ?? 0.0;
-          final duration = (map['duration'] as num?)?.toDouble() ?? 0.0;
-          final updatedAt = (map['updatedAt'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
+        if (val is! Map) continue;
+        final map = Map<String, dynamic>.from(val);
+        if (map['dirty'] != true) continue;
 
-          localItemsToUpload.add({
-            'animeId': animeId,
-            'animeName': animeName,
-            'poster': poster,
-            'episodeId': episodeId,
-            'episodeName': episodeName,
-            'episodeNumber': episodeNumber,
-            'seasonNumber': seasonNumber,
-            'progress': progress.round(),
-            'duration': duration.round(),
-            'updatedAt': updatedAt,
-          });
-        }
+        final animeId = map['animeId']?.toString() ?? key.toString();
+        if (animeId.isEmpty) continue;
+
+        final durationSec = (map['duration'] as num?)?.toInt() ?? 0;
+        final progress = normalizeProgress(map['progress']);
+        final positionMs = (map['positionMs'] as num?)?.toInt() ??
+            (progress > 0 && durationSec > 0
+                ? (progress * durationSec * 1000).round()
+                : 0);
+
+        localItemsToUpload.add({
+          'animeId': animeId,
+          'animeName': map['animeName']?.toString() ?? 'Anime',
+          'poster': map['poster']?.toString() ?? '',
+          'episodeId': map['episodeId']?.toString() ?? 'ep-1',
+          'episodeName': map['episodeName']?.toString() ?? 'Bölüm 1',
+          'episodeNumber': (map['episodeNumber'] as num?)?.toInt() ?? 1,
+          'seasonNumber': (map['seasonNumber'] as num?)?.toInt() ?? 1,
+          'progress': progress,
+          'duration': durationSec,
+          'positionMs': positionMs,
+          'updatedAt': toEpochMs(map['updatedAt']),
+        });
       }
 
-      // Upload local items to server
+      // Upload local items to server, then mark them as synced
       if (localItemsToUpload.isNotEmpty) {
         await _remoteDataSource.uploadHistory(localItemsToUpload);
+        for (final item in localItemsToUpload) {
+          final animeId = item['animeId'] as String? ?? '';
+          if (animeId.isEmpty) continue;
+          final existing = historyBox.get(animeId);
+          if (existing is Map) {
+            final cleaned = Map<String, dynamic>.from(existing);
+            cleaned['dirty'] = false;
+            await historyBox.put(animeId, cleaned);
+          }
+        }
       }
 
       // B. Download latest server history and merge into local Hive
       final serverHistory = await _remoteDataSource.getRemoteHistory();
+      Box? deletedBox;
+      try {
+        deletedBox = Hive.box('history_deleted');
+      } catch (_) {}
+
       for (final sItem in serverHistory) {
         final animeId = sItem['animeId']?.toString();
-        if (animeId != null && animeId.isNotEmpty) {
-          final existing = historyBox.get(animeId);
-          int localUpdated = 0;
-          if (existing is Map && existing['updatedAt'] is num) {
-            localUpdated = (existing['updatedAt'] as num).toInt();
-          }
+        if (animeId == null || animeId.isEmpty) continue;
 
-          final serverUpdated = (sItem['updatedAt'] as num?)?.toInt() ?? 0;
-          if (serverUpdated >= localUpdated) {
-            await historyBox.put(animeId, {
-              'animeId': animeId,
-              'animeName': sItem['animeName'],
-              'poster': sItem['poster'],
-              'episodeId': sItem['episodeId'],
-              'episodeName': sItem['episodeName'],
-              'episodeNumber': sItem['episodeNumber'],
-              'seasonNumber': sItem['seasonNumber'],
-              'progress': sItem['progress'],
-              'duration': sItem['duration'],
-              'updatedAt': serverUpdated,
-            });
+        final existing = historyBox.get(animeId);
+        final existingMap =
+            existing is Map ? Map<String, dynamic>.from(existing) : null;
+
+        final serverUpdated = toEpochMs(sItem['updatedAt']);
+        final localUpdated =
+            existingMap == null ? 0 : toEpochMs(existingMap['updatedAt']);
+
+        // Respect locally removed items (tombstone) unless server has newer data
+        if (deletedBox != null) {
+          final tombstone = (deletedBox.get(animeId) as num?)?.toInt() ?? 0;
+          if (tombstone > 0 && serverUpdated <= tombstone) continue;
+          if (tombstone > 0 && serverUpdated > tombstone) {
+            await deletedBox.delete(animeId);
           }
         }
+
+        // Keep newer local data (e.g. watched offline) untouched
+        if (existingMap != null && serverUpdated < localUpdated) continue;
+
+        final serverProgress = normalizeProgress(sItem['progress']);
+        final serverDuration = (sItem['duration'] as num?)?.toInt() ??
+            (existingMap?['duration'] as num?)?.toInt() ??
+            0;
+        final serverPositionMs = (sItem['positionMs'] as num?)?.toInt() ??
+            (existingMap?['positionMs'] as num?)?.toInt() ??
+            (serverProgress > 0 && serverDuration > 0
+                ? (serverProgress * serverDuration * 1000).round()
+                : 0);
+
+        await historyBox.put(animeId, {
+          'animeId': animeId,
+          'animeName': sItem['animeName']?.toString() ??
+              existingMap?['animeName']?.toString() ??
+              'Anime',
+          'poster': sItem['poster']?.toString() ??
+              existingMap?['poster']?.toString() ??
+              '',
+          'episodeThumb': sItem['episodeThumb']?.toString() ??
+              existingMap?['episodeThumb']?.toString() ??
+              '',
+          'episodeId': sItem['episodeId']?.toString() ??
+              existingMap?['episodeId']?.toString() ??
+              'ep-1',
+          'episodeName': sItem['episodeName']?.toString() ??
+              existingMap?['episodeName']?.toString() ??
+              'Bölüm 1',
+          'episodeNumber': (sItem['episodeNumber'] as num?)?.toInt() ??
+              (existingMap?['episodeNumber'] as num?)?.toInt() ??
+              1,
+          'seasonNumber': (sItem['seasonNumber'] as num?)?.toInt() ??
+              (existingMap?['seasonNumber'] as num?)?.toInt() ??
+              1,
+          'progress': serverProgress,
+          'duration': serverDuration,
+          'positionMs': serverPositionMs,
+          'updatedAt': serverUpdated > 0 ? serverUpdated : localUpdated,
+        });
       }
     } catch (_) {}
   }
@@ -160,11 +226,38 @@ class SyncService with WidgetsBindingObserver {
   Future<void> _syncFavorites() async {
     try {
       final favoritesBox = Hive.box('favorites');
-      final serverFavorites = await _remoteDataSource.getRemoteFavorites();
+      Box? favDeletedBox;
+      try {
+        favDeletedBox = Hive.box('favorites_deleted');
+      } catch (_) {}
 
+      // 1. Prepare local favorites to upload to server
+      final List<Map<String, dynamic>> localFavoritesToUpload = [];
+      for (final key in favoritesBox.keys) {
+        final val = favoritesBox.get(key);
+        if (val is Map) {
+          final map = Map<String, dynamic>.from(val);
+          final animeId = map['animeId']?.toString() ?? map['id']?.toString() ?? key.toString();
+          if (animeId.isNotEmpty && (favDeletedBox == null || !favDeletedBox.containsKey(animeId))) {
+            localFavoritesToUpload.add({
+              'id': animeId,
+              'name': map['name']?.toString() ?? '',
+              'poster': map['poster']?.toString() ?? map['posterUrl']?.toString() ?? '',
+              'addedAt': map['addedAt'] is num ? map['addedAt'] : DateTime.now().millisecondsSinceEpoch,
+            });
+          }
+        }
+      }
+
+      // If we have local changes or deletions, upload to cloud
+      await _remoteDataSource.uploadFavorites(localFavoritesToUpload);
+
+      // 2. Fetch server favorites and add any new items not deleted locally
+      final serverFavorites = await _remoteDataSource.getRemoteFavorites();
       for (final item in serverFavorites) {
         final animeId = item['animeId']?.toString() ?? item['id']?.toString();
         if (animeId != null && animeId.isNotEmpty) {
+          if (favDeletedBox != null && favDeletedBox.containsKey(animeId)) continue;
           if (!favoritesBox.containsKey(animeId)) {
             await favoritesBox.put(animeId, item);
           }

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'package:calium_stream/core/theme/app_colors.dart';
@@ -7,7 +6,6 @@ import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/utils/episode_utils.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
-import 'package:calium_stream/core/widgets/shimmer_placeholder.dart';
 import 'package:calium_stream/features/anime_details/domain/entities/anime_detail_entity.dart';
 import 'package:calium_stream/features/anime_details/domain/entities/episode_entity.dart';
 
@@ -66,7 +64,9 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
     final historyData = historyBox.get(widget.animeId) as Map?;
     final lastWatchedSeason = historyData?['seasonNumber'] as int?;
     final lastWatchedEp = historyData?['episodeNumber'] as int?;
-    final watchProgress = (historyData?['progress'] as num?)?.toDouble();
+    final rawWatchProgress = (historyData?['progress'] as num?)?.toDouble() ?? 0.0;
+    final watchProgress =
+        (rawWatchProgress > 1.0 ? rawWatchProgress / 100.0 : rawWatchProgress).clamp(0.0, 1.0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -81,7 +81,7 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
               ),
               scrollDirection: Axis.horizontal,
               itemCount: widget.seasons.length,
-              separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.sm),
+              separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
               itemBuilder: (context, index) {
                 final season = widget.seasons[index];
                 final isSelected = season.seasonNumber == widget.selectedSeason;
@@ -201,13 +201,13 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: displayedEpisodes.length,
-            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
               final episode = displayedEpisodes[index];
               final isCurrentPlaying = lastWatchedSeason == widget.selectedSeason &&
                   lastWatchedEp == episode.episodeNumber;
 
-              final epProgress = isCurrentPlaying ? (watchProgress ?? 0.0) : (episode.watchProgress ?? 0.0);
+              final epProgress = isCurrentPlaying ? watchProgress : (episode.watchProgress ?? 0.0);
 
               return GestureDetector(
                 onTap: () => widget.onEpisodeTap(episode),

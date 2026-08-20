@@ -8,8 +8,8 @@ import 'package:calium_stream/features/search/domain/repositories/search_reposit
 
 class SearchRepositoryImpl implements SearchRepository {
   const SearchRepositoryImpl({
-    required SearchRemoteDataSource remoteDataSource,
-  }) : _remoteDataSource = remoteDataSource;
+    required this._remoteDataSource,
+  });
 
   final SearchRemoteDataSource _remoteDataSource;
 

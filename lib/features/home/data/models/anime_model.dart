@@ -7,6 +7,7 @@ class AnimeModel extends AnimeEntity {
     required super.title,
     required super.posterUrl,
     super.bannerUrl,
+    super.logoUrl,
     super.rating,
     super.currentEpisode,
     super.genres = const [],
@@ -16,6 +17,31 @@ class AnimeModel extends AnimeEntity {
     super.episodeNumber,
     super.watchProgress,
   });
+
+  AnimeModel copyWith({
+    String? bannerUrl,
+    String? logoUrl,
+    double? rating,
+    String? synopsis,
+    List<String>? genres,
+    bool clearBanner = false,
+  }) {
+    return AnimeModel(
+      id: id,
+      title: title,
+      posterUrl: posterUrl,
+      bannerUrl: clearBanner ? null : (bannerUrl ?? this.bannerUrl),
+      logoUrl: logoUrl ?? this.logoUrl,
+      rating: rating ?? this.rating,
+      currentEpisode: currentEpisode,
+      genres: genres ?? this.genres,
+      status: status,
+      synopsis: synopsis ?? this.synopsis,
+      seasonNumber: seasonNumber,
+      episodeNumber: episodeNumber,
+      watchProgress: watchProgress,
+    );
+  }
 
   factory AnimeModel.fromJson(Map<String, dynamic> json) {
     final inner = (json['content'] is Map<String, dynamic>)
@@ -58,6 +84,14 @@ class AnimeModel extends AnimeEntity {
         '';
     // Handle banner URL
     String? banner = inner['banner'] as String? ?? inner['details_banner'] as String? ?? inner['bannerUrl'] as String? ?? json['banner'] as String?;
+    // Handle logo URL
+    final logo = inner['logo'] as String? ?? json['logo'] as String?;
+
+    // If no poster exists, fall back to banner or logo so the card never
+    // renders an empty placeholder while the detail page has artwork.
+    if (poster.isEmpty) {
+      poster = (banner ?? logo) ?? '';
+    }
 
     // Handle episode / season info
     String? epBadge;
@@ -82,6 +116,7 @@ class AnimeModel extends AnimeEntity {
       title: title,
       posterUrl: ImageUtils.cleanImageUrl(poster),
       bannerUrl: banner != null ? ImageUtils.cleanImageUrl(banner) : null,
+      logoUrl: logo != null && logo.isNotEmpty ? ImageUtils.cleanImageUrl(logo) : null,
       rating: parsedRating,
       currentEpisode: epBadge,
       genres: parsedGenres,

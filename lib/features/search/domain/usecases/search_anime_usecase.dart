@@ -23,8 +23,7 @@ class SearchAnimeParams extends Equatable {
 }
 
 class SearchAnimeUseCase {
-  const SearchAnimeUseCase({required SearchRepository repository})
-      : _repository = repository;
+  const SearchAnimeUseCase({required this._repository});
 
   final SearchRepository _repository;
 

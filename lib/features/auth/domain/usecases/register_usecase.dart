@@ -21,8 +21,7 @@ class RegisterParams extends Equatable {
 }
 
 class RegisterUseCase {
-  const RegisterUseCase({required AuthRepository repository})
-      : _repository = repository;
+  const RegisterUseCase({required this._repository});
 
   final AuthRepository _repository;
 

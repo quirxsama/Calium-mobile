@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:calium_stream/core/theme/app_colors.dart';
@@ -165,19 +165,31 @@ class _LibraryScreenState extends State<LibraryScreen>
                       CircleAvatar(
                         radius: 40,
                         backgroundColor: AppColors.surfaceElevated,
-                        backgroundImage: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
-                            ? CachedNetworkImageProvider(user.avatarUrl!)
-                            : null,
-                        child: (user.avatarUrl == null || user.avatarUrl!.isEmpty)
-                            ? Text(
-                                user.username.isNotEmpty ? user.username[0].toUpperCase() : 'U',
-                                style: const TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
+                        child: ClipOval(
+                          child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+                              ? AppCachedImage(
+                                  imageUrl: user.avatarUrl,
+                                  fit: BoxFit.cover,
+                                  width: 80,
+                                  height: 80,
+                                  errorWidget: Text(
+                                    user.username.isNotEmpty ? user.username[0].toUpperCase() : 'U',
+                                    style: const TextStyle(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  user.username.isNotEmpty ? user.username[0].toUpperCase() : 'U',
+                                  style: const TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
-                              )
-                            : null,
+                        ),
                       ),
                       const SizedBox(height: 12),
 
@@ -457,7 +469,7 @@ class _LibraryScreenState extends State<LibraryScreen>
         context.read<LibraryBloc>().add(LoadLibraryRequested());
       },
       child: GridView.builder(
-        cacheExtent: 600,
+        scrollCacheExtent: ScrollCacheExtent.pixels(600),
         addRepaintBoundaries: true,
         padding: const EdgeInsets.all(AppSpacing.screenPadding),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -513,11 +525,11 @@ class _LibraryScreenState extends State<LibraryScreen>
         context.read<LibraryBloc>().add(LoadLibraryRequested());
       },
       child: ListView.separated(
-        cacheExtent: 500,
+        scrollCacheExtent: ScrollCacheExtent.pixels(500),
         addRepaintBoundaries: true,
         padding: const EdgeInsets.all(AppSpacing.screenPadding),
         itemCount: history.length,
-        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
         itemBuilder: (context, index) {
           final item = history[index];
 
@@ -531,9 +543,12 @@ class _LibraryScreenState extends State<LibraryScreen>
             child: Row(
               children: [
                 AppCachedImage(
-                  imageUrl: item.posterUrl,
-                  width: 70,
-                  height: 95,
+                  imageUrl: item.episodeThumb.isNotEmpty ? item.episodeThumb : item.posterUrl,
+                  fallbackUrls: [
+                    if (item.episodeThumb.isNotEmpty) item.posterUrl,
+                  ],
+                  width: 100,
+                  height: 68,
                   fit: BoxFit.cover,
                   borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
                 ),
@@ -590,7 +605,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                         child: TextButton.icon(
                           onPressed: () {
                             context.push(
-                              '/watch/${item.animeId}?url=&title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&ep=${item.episodeNumber}&s=${item.seasonNumber}',
+                              '/watch/${item.animeId}?url=&title=${Uri.encodeComponent(item.animeName)}&episode=${Uri.encodeComponent(item.episodeName)}&ep=${item.episodeNumber}&s=${item.seasonNumber}&poster=${Uri.encodeComponent(item.posterUrl)}',
                             );
                           },
                           icon: const Icon(
@@ -614,6 +629,21 @@ class _LibraryScreenState extends State<LibraryScreen>
                       ),
                     ],
                   ),
+                ),
+
+                // Remove from history
+                IconButton(
+                  tooltip: 'Geçmişten Kaldır',
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    size: 16,
+                    color: AppColors.textMuted,
+                  ),
+                  onPressed: () {
+                    context.read<LibraryBloc>().add(
+                          RemoveHistoryItemRequested(animeId: item.animeId),
+                        );
+                  },
                 ),
               ],
             ),

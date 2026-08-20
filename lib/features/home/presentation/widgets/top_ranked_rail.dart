@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:go_router/go_router.dart';
 
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
-import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/core/widgets/section_header.dart';
 import 'package:calium_stream/features/home/domain/entities/anime_entity.dart';
@@ -43,9 +43,9 @@ class TopRankedRail extends StatelessWidget {
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
             scrollDirection: Axis.horizontal,
-            cacheExtent: 600,
+            scrollCacheExtent: ScrollCacheExtent.pixels(600),
             itemCount: top10.length,
-            separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.lg),
+            separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.lg),
             itemBuilder: (context, index) {
               final anime = top10[index];
               final rank = index + 1;

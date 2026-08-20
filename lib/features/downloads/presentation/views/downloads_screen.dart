@@ -162,7 +162,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 child: ListView.separated(
                   padding: const EdgeInsets.all(AppSpacing.screenPadding),
                   itemCount: animeIds.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+                  separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
                   itemBuilder: (context, index) {
                     final animeId = animeIds[index];
                     final animeTasks = grouped[animeId]!;
@@ -239,7 +239,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                               physics: const NeverScrollableScrollPhysics(),
                               padding: const EdgeInsets.all(AppSpacing.sm),
                               itemCount: animeTasks.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
+                              separatorBuilder: (_, _) => const Divider(height: 1, color: Colors.white10),
                               itemBuilder: (ctx, epIndex) {
                                 final task = animeTasks[epIndex];
 
@@ -297,7 +297,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                                               ),
                                               onPressed: () {
                                                 context.push(
-                                                  '/watch/${task.animeId}?title=${Uri.encodeComponent(task.animeTitle)}&episode=${Uri.encodeComponent(task.episodeTitle)}&s=${task.seasonNumber}&ep=${task.episodeNumber}',
+                                                  '/watch/${task.animeId}?title=${Uri.encodeComponent(task.animeTitle)}&episode=${Uri.encodeComponent(task.episodeTitle)}&s=${task.seasonNumber}&ep=${task.episodeNumber}&poster=${Uri.encodeComponent(task.posterUrl)}',
                                                 );
                                               },
                                             )

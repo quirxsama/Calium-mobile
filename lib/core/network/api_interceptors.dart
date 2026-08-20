@@ -40,8 +40,7 @@ class AniziumHeaderInterceptor extends Interceptor {
 
 /// Attaches the Calium user session JWT and calium_session cookie only to Calium backend endpoints.
 class AuthInterceptor extends Interceptor {
-  AuthInterceptor({required FlutterSecureStorage secureStorage})
-      : _secureStorage = secureStorage;
+  AuthInterceptor({required this._secureStorage});
 
   final FlutterSecureStorage _secureStorage;
 

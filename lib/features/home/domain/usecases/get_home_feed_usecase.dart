@@ -5,8 +5,7 @@ import 'package:calium_stream/features/home/domain/entities/home_feed_entity.dar
 import 'package:calium_stream/features/home/domain/repositories/home_repository.dart';
 
 class GetHomeFeedUseCase {
-  const GetHomeFeedUseCase({required HomeRepository repository})
-      : _repository = repository;
+  const GetHomeFeedUseCase({required this._repository});
 
   final HomeRepository _repository;
 

@@ -101,7 +101,7 @@ class AddToListBottomSheet extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: state.myLists.length,
-                    separatorBuilder: (_, __) => const Divider(color: AppColors.border, height: 1),
+                    separatorBuilder: (_, _) => const Divider(color: AppColors.border, height: 1),
                     itemBuilder: (context, index) {
                       final list = state.myLists[index];
                       final containsAnime = list.items.any((it) => it.animeId == animeId);

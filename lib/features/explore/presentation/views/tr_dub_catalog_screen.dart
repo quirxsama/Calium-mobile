@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
@@ -90,7 +91,7 @@ class _TrDubCatalogScreenState extends State<TrDubCatalogScreen> {
                       child: Text('Türkçe dublajlı anime bulunamadı.', style: TextStyle(color: AppColors.textMuted)),
                     )
                   : GridView.builder(
-                      cacheExtent: 600,
+                      scrollCacheExtent: ScrollCacheExtent.pixels(600),
                       addRepaintBoundaries: true,
                       padding: const EdgeInsets.all(AppSpacing.screenPadding),
                       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(

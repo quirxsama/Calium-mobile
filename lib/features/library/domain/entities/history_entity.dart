@@ -12,6 +12,7 @@ class HistoryEntity extends Equatable {
     required this.progress,
     required this.duration,
     required this.updatedAt,
+    this.episodeThumb = '',
   });
 
   final String animeId;
@@ -24,6 +25,7 @@ class HistoryEntity extends Equatable {
   final double progress;
   final int duration;
   final DateTime updatedAt;
+  final String episodeThumb;
 
   @override
   List<Object?> get props => [
@@ -37,5 +39,6 @@ class HistoryEntity extends Equatable {
         progress,
         duration,
         updatedAt,
+        episodeThumb,
       ];
 }

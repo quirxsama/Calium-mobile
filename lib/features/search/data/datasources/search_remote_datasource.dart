@@ -13,8 +13,7 @@ abstract class SearchRemoteDataSource {
 }
 
 class SearchRemoteDataSourceImpl implements SearchRemoteDataSource {
-  const SearchRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const SearchRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 

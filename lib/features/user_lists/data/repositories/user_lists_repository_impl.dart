@@ -6,8 +6,7 @@ import 'package:calium_stream/features/user_lists/domain/entities/user_list_enti
 import 'package:calium_stream/features/user_lists/domain/repositories/user_lists_repository.dart';
 
 class UserListsRepositoryImpl implements UserListsRepository {
-  const UserListsRepositoryImpl({required UserListsRemoteDataSource remoteDataSource})
-      : _remoteDataSource = remoteDataSource;
+  const UserListsRepositoryImpl({required this._remoteDataSource});
 
   final UserListsRemoteDataSource _remoteDataSource;
 
@@ -124,6 +123,20 @@ class UserListsRepositoryImpl implements UserListsRepository {
     try {
       final res = await _remoteDataSource.toggleLikeList(listId, currentlyLiked: currentlyLiked);
       return Right(res);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(message: e.message));
+    } on NetworkException catch (e) {
+      return Left(NetworkFailure(message: e.message));
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> deleteList(String listId) async {
+    try {
+      await _remoteDataSource.deleteList(listId);
+      return const Right(null);
     } on ServerException catch (e) {
       return Left(ServerFailure(message: e.message));
     } on NetworkException catch (e) {

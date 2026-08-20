@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:calium_stream/core/theme/app_colors.dart';
@@ -10,7 +9,6 @@ import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/anime_poster_card.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/core/widgets/glass_container.dart';
-import 'package:calium_stream/core/widgets/shimmer_placeholder.dart';
 import 'package:calium_stream/features/anime_details/domain/repositories/anime_detail_repository.dart';
 import 'package:calium_stream/features/anime_details/domain/usecases/get_anime_detail_usecase.dart';
 import 'package:calium_stream/features/anime_details/domain/usecases/get_cast_usecase.dart';
@@ -19,6 +17,7 @@ import 'package:calium_stream/features/anime_details/presentation/widgets/cast_c
 import 'package:calium_stream/features/anime_details/presentation/widgets/episode_detail_sheet.dart';
 import 'package:calium_stream/features/anime_details/presentation/widgets/episode_list_widget.dart';
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:calium_stream/features/library/domain/entities/favorite_entity.dart';
 import 'package:calium_stream/features/library/presentation/bloc/library_bloc.dart';
 import 'package:calium_stream/features/user_lists/presentation/widgets/add_to_list_bottom_sheet.dart';
@@ -245,63 +244,119 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                     ),
                     child: Row(
                       children: [
-                        // Play Button
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              if (state.episodes.isNotEmpty) {
-                                final firstEp = state.episodes.first;
-                                context.push(
-                                  '/watch/${detail.id}?url=&title=${Uri.encodeComponent(detail.title)}&episode=${Uri.encodeComponent(firstEp.title ?? 'Bölüm 1')}&ep=${firstEp.episodeNumber}&s=${state.selectedSeason}',
-                                );
-                              }
-                            },
-                            icon: const Icon(
-                              Icons.play_arrow_rounded,
-                              size: 24,
-                            ),
-                            label: const Text('İzle'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                  AppSpacing.borderRadiusMd,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
+                        // Play Button with Resume Support
+                        ValueListenableBuilder(
+                          valueListenable: Hive.box('history').listenable(),
+                          builder: (context, Box box, _) {
+                            final saved = box.get(detail.id);
+                            int targetSeason = state.selectedSeason;
+                            int targetEp = 1;
+                            String targetEpTitle = 'Bölüm 1';
+                            bool hasHistory = false;
 
-                        // Favorite Button
-                        IconButton.filled(
-                          onPressed: () {
-                            context.read<LibraryBloc>().add(
-                                  ToggleFavoriteRequested(
-                                    favorite: FavoriteEntity(
-                                      animeId: detail.id,
-                                      name: detail.title,
-                                      posterUrl: detail.posterUrl,
-                                      addedAt: DateTime.now(),
+                            if (saved is Map) {
+                              final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
+                              final epNum = int.tryParse(saved['episodeNumber']?.toString() ?? '');
+                              if (epNum != null && epNum > 0) {
+                                targetSeason = sNum ?? targetSeason;
+                                targetEp = epNum;
+                                targetEpTitle = saved['episodeName']?.toString() ?? 'Bölüm $epNum';
+                                hasHistory = true;
+                              }
+                            }
+
+                            if (!hasHistory && state.episodes.isNotEmpty) {
+                              final firstEp = state.episodes.first;
+                              targetEp = firstEp.episodeNumber;
+                              targetEpTitle = firstEp.title ?? 'Bölüm ${firstEp.episodeNumber}';
+                            }
+
+                            final buttonLabel = hasHistory
+                                ? 'Devam Et (Bölüm $targetEp)'
+                                : 'İzle';
+
+                            return Expanded(
+                              flex: 2,
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  context.push(
+                                    '/watch/${detail.id}?url=&title=${Uri.encodeComponent(detail.title)}&episode=${Uri.encodeComponent(targetEpTitle)}&ep=$targetEp&s=$targetSeason&poster=${Uri.encodeComponent(detail.posterUrl)}',
+                                  );
+                                },
+                                icon: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  size: 24,
+                                ),
+                                label: Text(
+                                  buttonLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      AppSpacing.borderRadiusMd,
                                     ),
                                   ),
-                                );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Listeye eklendi'),
-                                duration: Duration(seconds: 1),
+                                ),
                               ),
                             );
                           },
-                          icon: const Icon(Icons.bookmark_border_rounded),
-                          style: IconButton.styleFrom(
-                            backgroundColor: AppColors.surfaceElevated,
-                            foregroundColor: AppColors.textPrimary,
-                            padding: const EdgeInsets.all(14),
-                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+
+                        // Favorite (Heart) Button
+                        BlocBuilder<LibraryBloc, LibraryState>(
+                          builder: (context, libraryState) {
+                            final favorites = libraryState is LibraryLoaded
+                                ? libraryState.favorites
+                                : const <FavoriteEntity>[];
+                            final isFavorite = favorites
+                                .any((f) => f.animeId == detail.id);
+                            return IconButton.filled(
+                              tooltip: isFavorite
+                                  ? 'Favorilerden Çıkar'
+                                  : 'Favorilere Ekle',
+                              onPressed: () {
+                                context.read<LibraryBloc>().add(
+                                      ToggleFavoriteRequested(
+                                        favorite: FavoriteEntity(
+                                          animeId: detail.id,
+                                          name: detail.title,
+                                          posterUrl: detail.posterUrl,
+                                          addedAt: DateTime.now(),
+                                        ),
+                                      ),
+                                    );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      isFavorite
+                                          ? 'Favorilerden çıkarıldı'
+                                          : 'Favorilere eklendi',
+                                    ),
+                                    duration: const Duration(seconds: 1),
+                                  ),
+                                );
+                              },
+                              icon: Icon(
+                                isFavorite
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                color: isFavorite
+                                    ? AppColors.accentCrimson
+                                    : AppColors.textPrimary,
+                              ),
+                              style: IconButton.styleFrom(
+                                backgroundColor: AppColors.surfaceElevated,
+                                foregroundColor: AppColors.textPrimary,
+                                padding: const EdgeInsets.all(14),
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(width: AppSpacing.sm),
 
@@ -515,7 +570,7 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                     },
                     onDirectPlay: (episode) {
                       context.push(
-                        '/watch/${detail.id}?url=&title=${Uri.encodeComponent(detail.title)}&episode=${Uri.encodeComponent(episode.title ?? 'Bölüm ${episode.episodeNumber}')}&ep=${episode.episodeNumber}&s=${state.selectedSeason}',
+                        '/watch/${detail.id}?url=&title=${Uri.encodeComponent(detail.title)}&episode=${Uri.encodeComponent(episode.title ?? 'Bölüm ${episode.episodeNumber}')}&ep=${episode.episodeNumber}&s=${state.selectedSeason}&poster=${Uri.encodeComponent(detail.posterUrl)}',
                       );
                     },
                   ),
@@ -551,7 +606,7 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                             ),
                             scrollDirection: Axis.horizontal,
                             itemCount: state.similarAnime.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (_, _) =>
                                 const SizedBox(width: AppSpacing.md),
                             itemBuilder: (context, index) {
                               final anime = state.similarAnime[index];
@@ -559,6 +614,11 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                                 id: anime.id,
                                 title: anime.title,
                                 posterUrl: anime.posterUrl,
+                                fallbackUrls: [
+                                  if (anime.bannerUrl != null &&
+                                      anime.bannerUrl!.isNotEmpty)
+                                    anime.bannerUrl!,
+                                ],
                                 rating: anime.rating,
                                 onTap: () => context.push('/anime/${anime.id}'),
                               );

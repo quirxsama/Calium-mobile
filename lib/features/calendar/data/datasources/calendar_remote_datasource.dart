@@ -10,8 +10,7 @@ abstract class CalendarRemoteDataSource {
 }
 
 class CalendarRemoteDataSourceImpl implements CalendarRemoteDataSource {
-  const CalendarRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const CalendarRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 

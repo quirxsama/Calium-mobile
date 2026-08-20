@@ -23,11 +23,11 @@ abstract class UserListsRemoteDataSource {
     required String animeId,
   });
   Future<bool> toggleLikeList(String listId, {bool? currentlyLiked});
+  Future<void> deleteList(String listId);
 }
 
 class UserListsRemoteDataSourceImpl implements UserListsRemoteDataSource {
-  const UserListsRemoteDataSourceImpl({required DioClient dioClient})
-      : _dioClient = dioClient;
+  const UserListsRemoteDataSourceImpl({required this._dioClient});
 
   final DioClient _dioClient;
 
@@ -158,6 +158,16 @@ class UserListsRemoteDataSourceImpl implements UserListsRemoteDataSource {
         return data['liked'] == true;
       }
       return currentlyLiked != true;
+    } catch (e) {
+      if (e is ServerException) rethrow;
+      throw ServerException(message: e.toString());
+    }
+  }
+
+  @override
+  Future<void> deleteList(String listId) async {
+    try {
+      await _dioClient.delete<void>('/api/lists/$listId');
     } catch (e) {
       if (e is ServerException) rethrow;
       throw ServerException(message: e.toString());

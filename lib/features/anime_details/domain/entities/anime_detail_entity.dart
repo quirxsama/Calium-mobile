@@ -22,6 +22,7 @@ class AnimeDetailEntity extends Equatable {
     required this.posterUrl,
     this.originalTitle,
     this.bannerUrl,
+    this.logoUrl,
     this.synopsis = '',
     this.rating,
     this.totalEpisodes,
@@ -39,6 +40,7 @@ class AnimeDetailEntity extends Equatable {
   final String? originalTitle;
   final String posterUrl;
   final String? bannerUrl;
+  final String? logoUrl;
   final String synopsis;
   final double? rating;
   final int? totalEpisodes;
@@ -57,6 +59,7 @@ class AnimeDetailEntity extends Equatable {
         originalTitle,
         posterUrl,
         bannerUrl,
+        logoUrl,
         synopsis,
         rating,
         totalEpisodes,
