@@ -3,6 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:palette_generator/palette_generator.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
@@ -17,7 +20,6 @@ import 'package:calium_stream/features/anime_details/presentation/widgets/cast_c
 import 'package:calium_stream/features/anime_details/presentation/widgets/episode_detail_sheet.dart';
 import 'package:calium_stream/features/anime_details/presentation/widgets/episode_list_widget.dart';
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:calium_stream/features/library/domain/entities/favorite_entity.dart';
 import 'package:calium_stream/features/library/presentation/bloc/library_bloc.dart';
 import 'package:calium_stream/features/user_lists/presentation/widgets/add_to_list_bottom_sheet.dart';
@@ -53,59 +55,100 @@ class _AnimeDetailView extends StatefulWidget {
 
 class _AnimeDetailViewState extends State<_AnimeDetailView> {
   bool _isSynopsisExpanded = false;
+  Color _dynamicAccentColor = AppColors.primary;
+  Color _dynamicGlowColor = AppColors.primary.withAlpha(45);
+  String? _lastExtractedPoster;
+
+  void _extractPalette(String? imageUrl) {
+    if (imageUrl == null || imageUrl.isEmpty || _lastExtractedPoster == imageUrl) return;
+    _lastExtractedPoster = imageUrl;
+
+    final fullUrl = imageUrl.startsWith('http') ? imageUrl : 'https://calium.fun$imageUrl';
+    PaletteGenerator.fromImageProvider(
+      CachedNetworkImageProvider(fullUrl),
+      maximumColorCount: 16,
+    ).then((palette) {
+      if (!mounted) return;
+      final dominant = palette.vibrantColor?.color ??
+          palette.dominantColor?.color ??
+          palette.lightVibrantColor?.color ??
+          AppColors.primary;
+      setState(() {
+        _dynamicAccentColor = dominant;
+        _dynamicGlowColor = dominant.withAlpha(70);
+      });
+    }).catchError((_) {});
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: BlocBuilder<AnimeDetailBloc, AnimeDetailState>(
-        builder: (context, state) {
-          if (state is AnimeDetailLoading || state is AnimeDetailInitial) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            );
-          }
+      body: AnimatedContainer(
+        duration: const Duration(milliseconds: 700),
+        curve: Curves.easeInOutCubic,
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          gradient: RadialGradient(
+            center: const Alignment(0.0, -0.65),
+            radius: 1.15,
+            colors: [
+              _dynamicGlowColor,
+              AppColors.background.withAlpha(245),
+              AppColors.background,
+            ],
+            stops: const [0.0, 0.55, 1.0],
+          ),
+        ),
+        child: BlocBuilder<AnimeDetailBloc, AnimeDetailState>(
+          builder: (context, state) {
+            if (state is AnimeDetailLoading || state is AnimeDetailInitial) {
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              );
+            }
 
-          if (state is AnimeDetailFailureState) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.error_outline_rounded,
-                    color: AppColors.accentCrimson,
-                    size: 48,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(state.message, style: AppTypography.bodyMedium),
-                  const SizedBox(height: AppSpacing.md),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Geri Dön'),
-                  ),
-                ],
-              ),
-            );
-          }
+            if (state is AnimeDetailFailureState) {
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: AppColors.accentCrimson,
+                      size: 48,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(state.message, style: AppTypography.bodyMedium),
+                    const SizedBox(height: AppSpacing.md),
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Geri Dön'),
+                    ),
+                  ],
+                ),
+              );
+            }
 
-          if (state is AnimeDetailLoaded) {
-            final detail = state.detail;
-            final bannerImage = detail.bannerUrl ?? detail.posterUrl;
+            if (state is AnimeDetailLoaded) {
+              final detail = state.detail;
+              final bannerImage = detail.bannerUrl ?? detail.posterUrl;
+              _extractPalette(detail.posterUrl);
 
-            return CustomScrollView(
-              physics: const BouncingScrollPhysics(),
-              slivers: [
-                // ── Hero Banner Header ──────────────────────────────
-                SliverAppBar(
-                  expandedHeight: 340,
-                  pinned: true,
-                  backgroundColor: AppColors.background,
-                  elevation: 0,
-                  leading: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: GlassContainer(
-                      borderRadius: 12,
-                      padding: EdgeInsets.zero,
+              return CustomScrollView(
+                physics: const BouncingScrollPhysics(),
+                slivers: [
+                  // ── Hero Banner Header ──────────────────────────────
+                  SliverAppBar(
+                    expandedHeight: 340,
+                    pinned: true,
+                    backgroundColor: AppColors.background,
+                    elevation: 0,
+                    leading: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: GlassContainer(
+                        borderRadius: 12,
+                        padding: EdgeInsets.zero,
                       child: IconButton(
                         icon: const Icon(
                           Icons.arrow_back_ios_new_rounded,
@@ -306,8 +349,10 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
+                                  backgroundColor: _dynamicAccentColor,
+                                  foregroundColor: _dynamicAccentColor.computeLuminance() > 0.5
+                                      ? Colors.black
+                                      : Colors.white,
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(
@@ -345,7 +390,7 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                                       ),
                                     );
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
+                                    SnackBar(
                                     content: Text(
                                       isFavorite
                                           ? 'Favorilerden çıkarıldı'
@@ -449,18 +494,18 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                               vertical: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.surfaceElevated,
+                              color: _dynamicAccentColor.withAlpha(25),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: AppColors.border,
-                                width: 0.8,
+                                color: _dynamicAccentColor.withAlpha(85),
+                                width: 0.9,
                               ),
                             ),
                             child: Text(
                               genre,
                               style: AppTypography.caption.copyWith(
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
                                 fontSize: 12,
                               ),
                             ),
@@ -653,6 +698,7 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
           return const SizedBox.shrink();
         },
       ),
-    );
-  }
+    ),
+  );
+}
 }
