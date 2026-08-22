@@ -8,6 +8,8 @@ abstract class SyncRemoteDataSource {
   Future<void> uploadHistory(List<Map<String, dynamic>> historyItems);
   Future<List<Map<String, dynamic>>> getRemoteFavorites();
   Future<void> uploadFavorites(List<Map<String, dynamic>> favoriteItems);
+  Future<List<Map<String, dynamic>>> getLatestEpisodes();
+  Future<List<Map<String, dynamic>>> getNotifications();
 }
 
 class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
@@ -81,6 +83,34 @@ class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
       );
     } catch (_) {
       // Best effort
+    }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getLatestEpisodes() async {
+    try {
+      final response = await _dioClient.get('/api/anizium/latest');
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['items'] is List) {
+        return (data['items'] as List).cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> getNotifications() async {
+    try {
+      final response = await _dioClient.get('/api/notifications');
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['items'] is List) {
+        return (data['items'] as List).cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (_) {
+      return [];
     }
   }
 }

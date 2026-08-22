@@ -78,6 +78,9 @@ class SyncService with WidgetsBindingObserver {
       // 3. Bidirectional Favorites Sync (/api/sync/favorites)
       await _syncFavorites();
 
+      // 4. Check for favorite anime new episode releases & notifications
+      await _checkFavoriteAnimeUpdates();
+
       _syncEventController.add(null);
     } catch (_) {
       // Background sync is silent & fault-tolerant
@@ -338,6 +341,32 @@ class SyncService with WidgetsBindingObserver {
           if (favDeletedBox != null && favDeletedBox.containsKey(animeId)) continue;
           if (!favoritesBox.containsKey(animeId)) {
             await favoritesBox.put(animeId, item);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _checkFavoriteAnimeUpdates() async {
+    try {
+      final favoritesBox = Hive.box('favorites');
+      if (favoritesBox.isEmpty) return;
+
+      final latest = await _remoteDataSource.getLatestEpisodes();
+      if (latest.isEmpty) return;
+
+      final prefsBox = Hive.box('preferences');
+
+      for (final ep in latest) {
+        final animeId = ep['animeId']?.toString() ?? ep['id']?.toString() ?? '';
+        final animeTitle = ep['animeTitle']?.toString() ?? ep['name']?.toString() ?? '';
+        final episodeNumber = ep['episodeNumber']?.toString() ?? ep['episode']?.toString() ?? '';
+
+        if (animeId.isNotEmpty && favoritesBox.containsKey(animeId)) {
+          final notifiedKey = 'notified_ep_${animeId}_$episodeNumber';
+          if (!prefsBox.containsKey(notifiedKey)) {
+            await prefsBox.put(notifiedKey, DateTime.now().millisecondsSinceEpoch);
+            debugPrint('🔔 Favori Anime Yeni Bölüm: $animeTitle - Bölüm $episodeNumber');
           }
         }
       }

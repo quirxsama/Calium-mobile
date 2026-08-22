@@ -1,6 +1,8 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 
+import 'package:calium_stream/features/social/domain/entities/app_notification_entity.dart';
+import 'package:calium_stream/features/social/domain/entities/follow_request_entity.dart';
 import 'package:calium_stream/features/social/domain/entities/room_entity.dart';
 import 'package:calium_stream/features/social/domain/repositories/social_repository.dart';
 
@@ -75,6 +77,21 @@ final class LeaveRoomRequested extends SocialEvent {
   List<Object?> get props => [roomId];
 }
 
+final class RespondFollowRequestRequested extends SocialEvent {
+  const RespondFollowRequestRequested({
+    required this.username,
+    required this.accept,
+  });
+
+  final String username;
+  final bool accept;
+
+  @override
+  List<Object?> get props => [username, accept];
+}
+
+final class MarkNotificationsReadRequested extends SocialEvent {}
+
 // ─── States ─────────────────────────────────────────────────────
 
 sealed class SocialState extends Equatable {
@@ -93,30 +110,50 @@ final class SocialLoaded extends SocialState {
     required this.rooms,
     required this.myRooms,
     required this.friends,
+    this.followRequests = const [],
+    this.notifications = const [],
     this.selectedTab = 0,
   });
 
   final List<RoomEntity> rooms;
   final List<RoomEntity> myRooms;
   final List<SocialFriendEntity> friends;
+  final List<FollowRequestEntity> followRequests;
+  final List<AppNotificationEntity> notifications;
   final int selectedTab;
+
+  int get unreadNotificationCount =>
+      notifications.where((n) => n.isUnread).length;
+
+  int get totalBadgeCount => followRequests.length + unreadNotificationCount;
 
   SocialLoaded copyWith({
     List<RoomEntity>? rooms,
     List<RoomEntity>? myRooms,
     List<SocialFriendEntity>? friends,
+    List<FollowRequestEntity>? followRequests,
+    List<AppNotificationEntity>? notifications,
     int? selectedTab,
   }) {
     return SocialLoaded(
       rooms: rooms ?? this.rooms,
       myRooms: myRooms ?? this.myRooms,
       friends: friends ?? this.friends,
+      followRequests: followRequests ?? this.followRequests,
+      notifications: notifications ?? this.notifications,
       selectedTab: selectedTab ?? this.selectedTab,
     );
   }
 
   @override
-  List<Object?> get props => [rooms, myRooms, friends, selectedTab];
+  List<Object?> get props => [
+        rooms,
+        myRooms,
+        friends,
+        followRequests,
+        notifications,
+        selectedTab,
+      ];
 }
 
 final class SocialRoomJoinedState extends SocialState {
@@ -138,15 +175,15 @@ final class SocialFailureState extends SocialState {
 // ─── BLoC ───────────────────────────────────────────────────────
 
 class SocialBloc extends Bloc<SocialEvent, SocialState> {
-  SocialBloc({required this._repository})
-      :
-        super(SocialInitial()) {
+  SocialBloc({required this._repository}) : super(SocialInitial()) {
     on<LoadSocialDataRequested>(_onLoad);
     on<SwitchSocialTabRequested>(_onSwitchTab);
     on<JoinRoomByCodeRequested>(_onJoinCode);
     on<CreateRoomRequested>(_onCreateRoom);
     on<CloseRoomRequested>(_onCloseRoom);
     on<LeaveRoomRequested>(_onLeaveRoom);
+    on<RespondFollowRequestRequested>(_onRespondFollowRequest);
+    on<MarkNotificationsReadRequested>(_onMarkNotificationsRead);
   }
 
   final SocialRepository _repository;
@@ -155,22 +192,29 @@ class SocialBloc extends Bloc<SocialEvent, SocialState> {
     LoadSocialDataRequested event,
     Emitter<SocialState> emit,
   ) async {
+    final currentTab = (state is SocialLoaded) ? (state as SocialLoaded).selectedTab : 0;
     emit(SocialLoading());
 
     final roomsResult = await _repository.getPublicRooms();
     final myRoomsResult = await _repository.getMyRooms();
     final friendsResult = await _repository.getFriends();
+    final requestsResult = await _repository.getFollowRequests();
+    final notifsResult = await _repository.getNotifications();
 
     final rooms = roomsResult.getOrElse(() => []);
     final myRooms = myRoomsResult.getOrElse(() => []);
     final friends = friendsResult.getOrElse(() => []);
+    final followRequests = requestsResult.getOrElse(() => []);
+    final notifications = notifsResult.getOrElse(() => []);
 
     emit(
       SocialLoaded(
         rooms: rooms,
         myRooms: myRooms,
         friends: friends,
-        selectedTab: 0,
+        followRequests: followRequests,
+        notifications: notifications,
+        selectedTab: currentTab,
       ),
     );
   }
@@ -237,5 +281,47 @@ class SocialBloc extends Bloc<SocialEvent, SocialState> {
       (_) => add(LoadSocialDataRequested()),
     );
   }
-}
 
+  Future<void> _onRespondFollowRequest(
+    RespondFollowRequestRequested event,
+    Emitter<SocialState> emit,
+  ) async {
+    if (state is SocialLoaded) {
+      final current = state as SocialLoaded;
+      final updatedRequests = current.followRequests
+          .where((r) => r.username != event.username)
+          .toList();
+      emit(current.copyWith(followRequests: updatedRequests));
+    }
+
+    await _repository.respondFollowRequest(
+      username: event.username,
+      accept: event.accept,
+    );
+    add(LoadSocialDataRequested());
+  }
+
+  Future<void> _onMarkNotificationsRead(
+    MarkNotificationsReadRequested event,
+    Emitter<SocialState> emit,
+  ) async {
+    await _repository.markNotificationsRead();
+    if (state is SocialLoaded) {
+      final current = state as SocialLoaded;
+      final updated = current.notifications.map((n) {
+        return AppNotificationEntity(
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          body: n.body,
+          avatarUrl: n.avatarUrl,
+          actorUsername: n.actorUsername,
+          animeId: n.animeId,
+          readAt: DateTime.now(),
+          createdAt: n.createdAt,
+        );
+      }).toList();
+      emit(current.copyWith(notifications: updated));
+    }
+  }
+}

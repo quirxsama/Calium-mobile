@@ -3,6 +3,8 @@ import 'package:dartz/dartz.dart';
 import 'package:calium_stream/core/error/exceptions.dart';
 import 'package:calium_stream/core/error/failures.dart';
 import 'package:calium_stream/features/social/data/datasources/social_remote_datasource.dart';
+import 'package:calium_stream/features/social/domain/entities/app_notification_entity.dart';
+import 'package:calium_stream/features/social/domain/entities/follow_request_entity.dart';
 import 'package:calium_stream/features/social/domain/entities/room_entity.dart';
 import 'package:calium_stream/features/social/domain/repositories/social_repository.dart';
 
@@ -120,6 +122,49 @@ class SocialRepositoryImpl implements SocialRepository {
       return Left(ServerFailure(message: e.message));
     } on NetworkException catch (e) {
       return Left(NetworkFailure(message: e.message));
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<FollowRequestEntity>>> getFollowRequests() async {
+    try {
+      final requests = await _remoteDataSource.getFollowRequests();
+      return Right(requests);
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> respondFollowRequest({
+    required String username,
+    required bool accept,
+  }) async {
+    try {
+      await _remoteDataSource.respondFollowRequest(username: username, accept: accept);
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, List<AppNotificationEntity>>> getNotifications() async {
+    try {
+      final notifications = await _remoteDataSource.getNotifications();
+      return Right(notifications);
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> markNotificationsRead() async {
+    try {
+      await _remoteDataSource.markNotificationsRead();
+      return const Right(null);
     } catch (e) {
       return Left(ServerFailure(message: e.toString()));
     }

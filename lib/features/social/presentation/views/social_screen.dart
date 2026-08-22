@@ -7,6 +7,8 @@ import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/core/widgets/shimmer_placeholder.dart';
+import 'package:calium_stream/features/social/domain/entities/app_notification_entity.dart';
+import 'package:calium_stream/features/social/domain/entities/follow_request_entity.dart';
 import 'package:calium_stream/features/social/domain/entities/room_entity.dart';
 import 'package:calium_stream/features/social/presentation/bloc/social_bloc.dart';
 import 'package:calium_stream/features/social/presentation/widgets/user_search_sheet.dart';
@@ -18,11 +20,20 @@ class SocialScreen extends StatefulWidget {
   State<SocialScreen> createState() => _SocialScreenState();
 }
 
-class _SocialScreenState extends State<SocialScreen> {
+class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     context.read<SocialBloc>().add(LoadSocialDataRequested());
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   void _openUserSearch() {
@@ -36,112 +47,459 @@ class _SocialScreenState extends State<SocialScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        title: Text(
-          'Sosyal',
-          style: AppTypography.headlineMedium.copyWith(
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Kullanıcı Ara & Takip Et',
-            icon: const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary),
-            onPressed: _openUserSearch,
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.black,
-        icon: const Icon(Icons.person_search_rounded),
-        label: const Text('Kullanıcı Ara', style: TextStyle(fontWeight: FontWeight.bold)),
-        onPressed: _openUserSearch,
-      ),
-      body: BlocBuilder<SocialBloc, SocialState>(
-        builder: (context, state) {
-          if (state is SocialLoading || state is SocialInitial) {
-            return ListView.builder(
-              padding: const EdgeInsets.all(AppSpacing.screenPadding),
-              itemCount: 5,
-              itemBuilder: (_, _) => const Padding(
-                padding: EdgeInsets.only(bottom: AppSpacing.md),
-                child: ShimmerPlaceholder(height: 70),
-              ),
-            );
-          }
+    return BlocBuilder<SocialBloc, SocialState>(
+      builder: (context, state) {
+        final totalBadge = (state is SocialLoaded) ? state.totalBadgeCount : 0;
+        final friendsCount = (state is SocialLoaded) ? state.friends.length : 0;
 
-          if (state is SocialLoaded) {
-            if (state.friends.isEmpty) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.xl),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            backgroundColor: AppColors.background,
+            elevation: 0,
+            title: Text(
+              'Sosyal',
+              style: AppTypography.headlineMedium.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            actions: [
+              IconButton(
+                tooltip: 'Kullanıcı Ara & Takip Et',
+                icon: const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary),
+                onPressed: _openUserSearch,
+              ),
+            ],
+            bottom: TabBar(
+              controller: _tabController,
+              indicatorColor: AppColors.primary,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textSecondary,
+              tabs: [
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withAlpha(25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.people_outline_rounded, size: 54, color: AppColors.primary),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Henüz Takip Ettiğiniz Arkadaşınız Yok',
-                        style: AppTypography.titleMedium.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Diğer anime severleri bulmak ve takip etmek için sağ üstteki arama butonunu kullanabilirsiniz.',
-                        style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        onPressed: _openUserSearch,
-                        icon: const Icon(Icons.person_add_alt_1_rounded, size: 20),
-                        label: const Text('Arkadaş Bul & Takip Et', style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
+                      const Icon(Icons.people_rounded, size: 18),
+                      const SizedBox(width: 6),
+                      Text('Arkadaşlar ($friendsCount)'),
                     ],
                   ),
                 ),
-              );
-            }
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.notifications_rounded, size: 18),
+                      const SizedBox(width: 6),
+                      const Text('İstekler & Bildirim'),
+                      if (totalBadge > 0) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentCrimson,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '$totalBadge',
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.black,
+            icon: const Icon(Icons.person_search_rounded),
+            label: const Text('Kullanıcı Ara', style: TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: _openUserSearch,
+          ),
+          body: (state is SocialLoading || state is SocialInitial)
+              ? ListView.builder(
+                  padding: const EdgeInsets.all(AppSpacing.screenPadding),
+                  itemCount: 5,
+                  itemBuilder: (_, _) => const Padding(
+                    padding: EdgeInsets.only(bottom: AppSpacing.md),
+                    child: ShimmerPlaceholder(height: 70),
+                  ),
+                )
+              : (state is SocialLoaded)
+                  ? TabBarView(
+                      controller: _tabController,
+                      children: [
+                        // ─── 1. Friends Tab ──────────────────────────────
+                        _buildFriendsTab(context, state),
 
-            return RefreshIndicator(
-              onRefresh: () async {
-                context.read<SocialBloc>().add(LoadSocialDataRequested());
-              },
-              child: ListView.separated(
-                padding: const EdgeInsets.all(AppSpacing.screenPadding),
-                itemCount: state.friends.length,
-                separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-                itemBuilder: (context, index) {
-                  final friend = state.friends[index];
-                  return _buildFriendTile(context, friend);
-                },
+                        // ─── 2. Requests & Notifications Tab ─────────────
+                        _buildRequestsAndNotificationsTab(context, state),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+        );
+      },
+    );
+  }
+
+  Widget _buildFriendsTab(BuildContext context, SocialLoaded state) {
+    if (state.friends.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withAlpha(25),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.people_outline_rounded, size: 54, color: AppColors.primary),
               ),
-            );
-          }
+              const SizedBox(height: 16),
+              Text(
+                'Henüz Takip Ettiğiniz Arkadaşınız Yok',
+                style: AppTypography.titleMedium.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Diğer anime severleri bulmak ve takip etmek için sağ alttaki arama butonunu kullanabilirsiniz.',
+                style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: _openUserSearch,
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 20),
+                label: const Text('Arkadaş Bul & Takip Et', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
-          return const SizedBox.shrink();
+    return RefreshIndicator(
+      onRefresh: () async {
+        context.read<SocialBloc>().add(LoadSocialDataRequested());
+      },
+      child: ListView.separated(
+        padding: const EdgeInsets.all(AppSpacing.screenPadding),
+        itemCount: state.friends.length,
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+        itemBuilder: (context, index) {
+          final friend = state.friends[index];
+          return _buildFriendTile(context, friend);
         },
+      ),
+    );
+  }
+
+  Widget _buildRequestsAndNotificationsTab(BuildContext context, SocialLoaded state) {
+    final requests = state.followRequests;
+    final notifications = state.notifications;
+
+    if (requests.isEmpty && notifications.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () async {
+          context.read<SocialBloc>().add(LoadSocialDataRequested());
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.6,
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceElevated,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.notifications_none_rounded, size: 48, color: AppColors.textMuted),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Yeni İstek veya Bildirim Yok',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Takip istekleri ve favori animelerinizin yeni bölümleri burada görünecek.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        context.read<SocialBloc>().add(LoadSocialDataRequested());
+      },
+      child: ListView(
+        padding: const EdgeInsets.all(AppSpacing.screenPadding),
+        children: [
+          // ─── 1. Follow Requests Section ─────────────────────────────
+          if (requests.isNotEmpty) ...[
+            Row(
+              children: [
+                const Icon(Icons.person_pin_circle_rounded, color: AppColors.primary, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Gelen Takip İstekleri (${requests.length})',
+                  style: AppTypography.titleSmall.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ...requests.map((req) => _buildFollowRequestCard(context, req)),
+            const SizedBox(height: AppSpacing.lg),
+          ],
+
+          // ─── 2. Notifications Section ───────────────────────────────
+          if (notifications.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.notifications_active_rounded, color: AppColors.primary, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Bildirimler',
+                      style: AppTypography.titleSmall.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                TextButton(
+                  onPressed: () {
+                    context.read<SocialBloc>().add(MarkNotificationsReadRequested());
+                  },
+                  child: const Text('Tümünü Okundu Say', style: TextStyle(color: AppColors.primary, fontSize: 12)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ...notifications.map((n) => _buildNotificationCard(context, n)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFollowRequestCard(BuildContext context, FollowRequestEntity req) {
+    final hasAvatar = req.avatarUrl != null && req.avatarUrl!.isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceDark,
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+        border: Border.all(color: AppColors.border, width: 0.8),
+      ),
+      child: Row(
+        children: [
+          // Requester Avatar
+          if (hasAvatar)
+            AppCachedImage(
+              imageUrl: req.avatarUrl,
+              width: 44,
+              height: 44,
+              fit: BoxFit.cover,
+              borderRadius: BorderRadius.circular(22),
+            )
+          else
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: AppColors.surfaceElevated,
+              child: Text(
+                req.username.isNotEmpty ? req.username[0].toUpperCase() : 'U',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ),
+          const SizedBox(width: 12),
+
+          // Requester Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  req.displayName ?? req.username,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                Text(
+                  '@${req.username}',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+
+          // Accept Button
+          IconButton(
+            tooltip: 'Kabul Et',
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.successGreen.withAlpha(35),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.check_rounded, color: AppColors.successGreen, size: 20),
+            onPressed: () {
+              context.read<SocialBloc>().add(
+                    RespondFollowRequestRequested(
+                      username: req.username,
+                      accept: true,
+                    ),
+                  );
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${req.displayName ?? req.username} takip isteği kabul edildi.'),
+                  backgroundColor: AppColors.successGreen,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 6),
+
+          // Decline Button
+          IconButton(
+            tooltip: 'Reddet',
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.accentCrimson.withAlpha(35),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.close_rounded, color: AppColors.accentCrimson, size: 20),
+            onPressed: () {
+              context.read<SocialBloc>().add(
+                    RespondFollowRequestRequested(
+                      username: req.username,
+                      accept: false,
+                    ),
+                  );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationCard(BuildContext context, AppNotificationEntity n) {
+    IconData iconData = Icons.notifications_rounded;
+    Color iconColor = AppColors.primary;
+
+    if (n.type == 'follow') {
+      iconData = Icons.person_add_rounded;
+      iconColor = const Color(0xFF02A9FF);
+    } else if (n.type == 'follow_request') {
+      iconData = Icons.person_pin_circle_rounded;
+      iconColor = Colors.orangeAccent;
+    } else if (n.type == 'follow_accepted') {
+      iconData = Icons.how_to_reg_rounded;
+      iconColor = AppColors.successGreen;
+    } else if (n.type == 'new_episode') {
+      iconData = Icons.play_circle_fill_rounded;
+      iconColor = AppColors.primary;
+    } else if (n.type == 'room_invite') {
+      iconData = Icons.tv_rounded;
+      iconColor = Colors.purpleAccent;
+    }
+
+    return InkWell(
+      onTap: () {
+        if (n.animeId != null && n.animeId!.isNotEmpty) {
+          context.push('/anime/${n.animeId}');
+        } else if (n.actorUsername != null && n.actorUsername!.isNotEmpty) {
+          context.push('/profile/${n.actorUsername}');
+        }
+      },
+      borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: n.isUnread ? AppColors.surfaceElevated : AppColors.surfaceDark,
+          borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+          border: Border.all(
+            color: n.isUnread ? AppColors.primary.withAlpha(100) : AppColors.border,
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconColor.withAlpha(30),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(iconData, color: iconColor, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        n.title,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: n.isUnread ? FontWeight.bold : FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      if (n.isUnread)
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    n.body,
+                    style: TextStyle(
+                      color: n.isUnread ? Colors.white70 : AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -229,4 +587,3 @@ class _SocialScreenState extends State<SocialScreen> {
     );
   }
 }
-

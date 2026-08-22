@@ -4,6 +4,8 @@ import 'package:calium_stream/core/constants/storage_keys.dart';
 import 'package:calium_stream/core/error/exceptions.dart';
 import 'package:calium_stream/core/network/dio_client.dart';
 import 'package:calium_stream/core/utils/image_utils.dart';
+import 'package:calium_stream/features/social/domain/entities/app_notification_entity.dart';
+import 'package:calium_stream/features/social/domain/entities/follow_request_entity.dart';
 import 'package:calium_stream/features/social/domain/entities/room_entity.dart';
 
 class SearchedUserEntity {
@@ -41,6 +43,10 @@ abstract class SocialRemoteDataSource {
   Future<List<SocialFriendEntity>> getFriends();
   Future<List<SearchedUserEntity>> searchUsers(String query);
   Future<String> toggleFollow(String username);
+  Future<List<FollowRequestEntity>> getFollowRequests();
+  Future<void> respondFollowRequest({required String username, required bool accept});
+  Future<List<AppNotificationEntity>> getNotifications();
+  Future<void> markNotificationsRead();
 }
 
 class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
@@ -296,5 +302,99 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
       if (e is ServerException) rethrow;
       throw ServerException(message: e.toString());
     }
+  }
+
+  @override
+  Future<List<FollowRequestEntity>> getFollowRequests() async {
+    try {
+      final response = await _dioClient.get('/api/follow/requests');
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['requests'] is List) {
+        return (data['requests'] as List).map((r) {
+          final requester = r['requester'] as Map<String, dynamic>?;
+          return FollowRequestEntity(
+            id: r['id']?.toString() ?? '',
+            username: requester?['username']?.toString() ?? '',
+            displayName: requester?['displayName']?.toString(),
+            avatarUrl: ImageUtils.cleanImageUrl(requester?['avatarUrl']?.toString()),
+            createdAt: r['createdAt'] != null ? DateTime.tryParse(r['createdAt'].toString()) : null,
+          );
+        }).toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Future<void> respondFollowRequest({required String username, required bool accept}) async {
+    try {
+      await _dioClient.patch(
+        '/api/follow/requests/$username',
+        data: {'action': accept ? 'accept' : 'decline'},
+      );
+    } catch (e) {
+      if (e is ServerException) rethrow;
+      throw ServerException(message: 'İstek yanıtlanamadı: $e');
+    }
+  }
+
+  @override
+  Future<List<AppNotificationEntity>> getNotifications() async {
+    try {
+      final response = await _dioClient.get('/api/notifications');
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['items'] is List) {
+        return (data['items'] as List).map((n) {
+          final payload = n['payload'] as Map<String, dynamic>? ?? {};
+          final type = n['type']?.toString() ?? '';
+          String title = 'Bildirim';
+          String body = '';
+          String? avatarUrl = ImageUtils.cleanImageUrl(payload['avatarUrl']?.toString());
+          String? actorUsername = payload['username']?.toString();
+          String? animeId = payload['animeId']?.toString();
+
+          if (type == 'follow') {
+            title = 'Yeni Takipçi';
+            body = '${payload['displayName'] ?? actorUsername ?? "Bir kullanıcı"} seni takip etmeye başladı.';
+          } else if (type == 'follow_request') {
+            title = 'Takip İsteği';
+            body = '${payload['displayName'] ?? actorUsername ?? "Bir kullanıcı"} seni takip etmek istiyor.';
+          } else if (type == 'follow_accepted') {
+            title = 'Takip İsteği Kabul Edildi';
+            body = '${payload['displayName'] ?? actorUsername ?? "Bir kullanıcı"} takip isteğini kabul etti.';
+          } else if (type == 'new_episode') {
+            title = 'Yeni Bölüm Yayında!';
+            body = '${payload['animeTitle'] ?? "Favori animenizin"} yeni bölümü (${payload['episodeNumber'] ?? "Yeni Bölüm"}) yayınlandı.';
+          } else if (type == 'room_invite') {
+            title = 'Oda Daveti';
+            body = '${payload['inviterName'] ?? "Bir arkadaşın"} seni "${payload['roomName'] ?? "Birlikte İzle"}" odasına davet etti.';
+          }
+
+          return AppNotificationEntity(
+            id: n['id']?.toString() ?? '',
+            type: type,
+            title: title,
+            body: body,
+            avatarUrl: avatarUrl,
+            actorUsername: actorUsername,
+            animeId: animeId,
+            readAt: n['readAt'] != null ? DateTime.tryParse(n['readAt'].toString()) : null,
+            createdAt: n['createdAt'] != null ? DateTime.tryParse(n['createdAt'].toString()) : null,
+          );
+        }).toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Future<void> markNotificationsRead() async {
+    try {
+      await _dioClient.patch('/api/notifications', data: {'all': true});
+    } catch (_) {}
   }
 }
