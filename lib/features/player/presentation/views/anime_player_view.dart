@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -59,6 +60,7 @@ class AnimePlayerView extends StatelessWidget {
           animeId: animeId,
           season: seasonNumber,
           episode: episodeNumber,
+          localFilePath: streamUrl.isNotEmpty ? streamUrl : null,
         ),
       child: _AnimePlayerContent(
         animeId: animeId,
@@ -68,6 +70,7 @@ class AnimePlayerView extends StatelessWidget {
         seasonNumber: seasonNumber,
         episodeNumber: episodeNumber,
         posterUrl: posterUrl,
+        initialStreamUrl: streamUrl,
       ),
     );
   }
@@ -82,6 +85,7 @@ class _AnimePlayerContent extends StatefulWidget {
     required this.seasonNumber,
     required this.episodeNumber,
     required this.posterUrl,
+    this.initialStreamUrl = '',
   });
 
   final String animeId;
@@ -91,6 +95,7 @@ class _AnimePlayerContent extends StatefulWidget {
   final int seasonNumber;
   final int episodeNumber;
   final String posterUrl;
+  final String initialStreamUrl;
 
   @override
   State<_AnimePlayerContent> createState() => _AnimePlayerContentState();
@@ -475,8 +480,6 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   Future<void> _playStream(String url, SubtitleTrackEntity? subtitle) async {
     if (url.isEmpty || url == _currentStreamUrl) return;
     final lastPos = _position;
-    final wasPlaying = _isPlaying;
-    final isFirstLoad = _currentStreamUrl.isEmpty;
     _currentStreamUrl = url;
     _introSkipped = false;
 
@@ -494,22 +497,47 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     }
 
     final isLocal = url.startsWith('/') || url.startsWith('file://');
-    final mediaUri = isLocal
-        ? (url.startsWith('file://') ? url : 'file://$url')
-        : url;
+    final cleanPath = url.startsWith('file://') ? url.replaceFirst('file://', '') : url;
+
+    // Safety validation for local offline file
+    if (isLocal) {
+      final file = File(cleanPath);
+      if (!file.existsSync() || file.lengthSync() < 100 * 1024) {
+        debugPrint('⚠️ Local file missing or corrupt: $cleanPath');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('İndirilen dosya bulunamadı veya bozuk. Çevrimiçi kaynağa geçiliyor...'),
+              backgroundColor: AppColors.accentCrimson,
+            ),
+          );
+          // Fallback to online sources
+          context.read<PlayerCubit>().loadVideoSources(
+            animeId: widget.animeId,
+            season: _currentSeasonNumber,
+            episode: _currentEpisodeNumber,
+          );
+        }
+        return;
+      }
+    }
+
     final media = isLocal
-        ? Media(mediaUri, start: seekTarget)
+        ? Media(cleanPath, start: seekTarget)
         : Media(
             url,
             httpHeaders: {
               'Referer': ApiConstants.referer,
               'Origin': ApiConstants.origin,
               'User-Agent': ApiConstants.userAgent,
+              'cf-control': ApiConstants.cfControl,
+              'user-session': ApiConstants.userSession,
             },
             start: seekTarget,
           );
 
-    await _player.open(media, play: isFirstLoad || wasPlaying);
+    await _player.open(media, play: true);
+    await _player.play();
 
     if (subtitle != null && subtitle.url.isNotEmpty) {
       await _player.setSubtitleTrack(
