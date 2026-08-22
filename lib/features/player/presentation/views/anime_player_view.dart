@@ -16,9 +16,11 @@ import 'package:calium_stream/features/anime_details/domain/entities/episode_ent
 import 'package:calium_stream/features/anime_details/domain/repositories/anime_detail_repository.dart';
 import 'package:calium_stream/features/player/domain/entities/video_source_entity.dart';
 import 'package:calium_stream/features/player/domain/repositories/player_repository.dart';
+import 'package:calium_stream/features/player/domain/usecases/get_intro_song_usecase.dart';
 import 'package:calium_stream/features/player/domain/usecases/get_video_sources_usecase.dart';
 import 'package:calium_stream/features/player/presentation/cubit/player_cubit.dart';
 import 'package:calium_stream/features/player/presentation/widgets/in_player_episodes_sheet.dart';
+import 'package:calium_stream/features/player/presentation/widgets/intro_song_badge.dart';
 import 'package:calium_stream/features/player/presentation/widgets/player_controls_hud.dart';
 import 'package:calium_stream/features/player/presentation/widgets/player_gesture_detector.dart';
 import 'package:calium_stream/features/player/presentation/widgets/player_settings_sheet.dart';
@@ -51,6 +53,7 @@ class AnimePlayerView extends StatelessWidget {
     return BlocProvider(
       create: (_) => PlayerCubit(
         getVideoSourcesUseCase: GetIt.I<GetVideoSourcesUseCase>(),
+        getIntroSongUseCase: GetIt.I<GetIntroSongUseCase>(),
       )..loadVideoSources(
           animeId: animeId,
           season: seasonNumber,
@@ -127,6 +130,10 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   Duration? _initialResumeTarget;
   Timer? _resumeSafetyTimer;
   bool _introSkipped = false;
+  bool _isDismissedIntroSong = false;
+  bool _isIntroSongFadingOut = false;
+  Timer? _introSongFadeTimer;
+  String _lastIntroSongEpisodeKey = '';
 
   final List<StreamSubscription> _subscriptions = [];
 
@@ -397,8 +404,11 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     }
 
     final isLocal = url.startsWith('/') || url.startsWith('file://');
+    final mediaUri = isLocal
+        ? (url.startsWith('file://') ? url : 'file://$url')
+        : url;
     final media = isLocal
-        ? Media(url, start: seekTarget)
+        ? Media(mediaUri, start: seekTarget)
         : Media(
             url,
             httpHeaders: {
@@ -535,8 +545,13 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _savedProgressRatio = savedProgress;
       _initialResumeTarget = savedSeekMs > 3000 ? Duration(milliseconds: savedSeekMs) : null;
       _introSkipped = false;
+      _isDismissedIntroSong = false;
+      _isIntroSongFadingOut = false;
+      _lastIntroSongEpisodeKey = '';
     });
 
+    _introSongFadeTimer?.cancel();
+    _introSongFadeTimer = null;
     _resumeSafetyTimer?.cancel();
     if (_initialResumeTarget != null) {
       _resumeSafetyTimer = Timer(const Duration(seconds: 10), () {
@@ -552,6 +567,26 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           animeId: widget.animeId,
           season: season,
           episode: episode,
+        );
+  }
+
+  void _fetchIntroSongIfNeeded(BuildContext context, PlayerReady state) {
+    final epKey = '${widget.animeId}_${_currentSeasonNumber}_$_currentEpisodeNumber';
+    if (_lastIntroSongEpisodeKey == epKey) return;
+    _lastIntroSongEpisodeKey = epKey;
+
+    final resolvedEpId = _currentEpisodeId.isNotEmpty
+        ? _currentEpisodeId
+        : _currentEpisodeNumber.toString();
+
+    context.read<PlayerCubit>().loadIntroSong(
+          animeId: widget.animeId,
+          episodeId: resolvedEpId,
+          animeName: widget.animeTitle,
+          season: _currentSeasonNumber,
+          episode: _currentEpisodeNumber,
+          introStart: state.sourceData.introStart,
+          streamUrl: state.selectedStream.url,
         );
   }
 
@@ -656,6 +691,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     try {
       GetIt.I<SyncService>().syncNow();
     } catch (_) {}
+    _introSongFadeTimer?.cancel();
     _controlsTimer?.cancel();
     _autoNextTimer?.cancel();
     for (final s in _subscriptions) {
@@ -691,10 +727,11 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         },
         child: BlocConsumer<PlayerCubit, PlayerState>(
           listener: (context, state) {
-          if (state is PlayerReady) {
-            _playStream(state.selectedStream.url, state.selectedSubtitle);
-          }
-        },
+            if (state is PlayerReady) {
+              _playStream(state.selectedStream.url, state.selectedSubtitle);
+              _fetchIntroSongIfNeeded(context, state);
+            }
+          },
         builder: (context, state) {
           if (state is PlayerLoading || state is PlayerInitial) {
             return const Center(
@@ -808,11 +845,6 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                       _player.setVolume(val);
                       setState(() => _volume = val);
                     },
-                    onSeek: (targetPos) {
-                      _cancelInitialResume();
-                      _player.seek(targetPos);
-                      _resetControlsTimer();
-                    },
                     child: Center(
                       child: RepaintBoundary(
                         child: Video(
@@ -852,7 +884,60 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                     child: CircularProgressIndicator(color: AppColors.primary),
                   ),
 
-                // 4. Skip Intro Button / Auto Skip Handler
+                // 4. Intro Song Badge (Bottom-Left)
+                if (state.introSong != null &&
+                    !_isDismissedIntroSong &&
+                    introStart != null &&
+                    introEnd != null)
+                  ValueListenableBuilder<Duration>(
+                    valueListenable: _positionNotifier,
+                    builder: (context, pos, _) {
+                      final currentSec = pos.inSeconds;
+                      final isInsideIntro = currentSec >= introStart && currentSec < introEnd;
+                      final isNearAfterIntro = currentSec >= introEnd && currentSec < introEnd + 4;
+
+                      if (isInsideIntro) {
+                        if (_isIntroSongFadingOut) {
+                          _introSongFadeTimer?.cancel();
+                          _introSongFadeTimer = null;
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) setState(() => _isIntroSongFadingOut = false);
+                          });
+                        }
+                      } else if (isNearAfterIntro) {
+                        if (!_isIntroSongFadingOut && _introSongFadeTimer == null) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() => _isIntroSongFadingOut = true);
+                              _introSongFadeTimer = Timer(const Duration(milliseconds: 3000), () {
+                                if (mounted) {
+                                  setState(() => _isIntroSongFadingOut = false);
+                                }
+                              });
+                            }
+                          });
+                        }
+                      }
+
+                      final shouldShow = isInsideIntro || (isNearAfterIntro && _isIntroSongFadingOut);
+                      if (!shouldShow) return const SizedBox.shrink();
+
+                      return Positioned(
+                        bottom: _showControls ? 85 : 28,
+                        left: 32,
+                        child: IntroSongBadge(
+                          song: state.introSong!,
+                          isVisible: isInsideIntro,
+                          isFadingOut: !isInsideIntro,
+                          onDismissed: () {
+                            setState(() => _isDismissedIntroSong = true);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+
+                // 5. Skip Intro Button / Auto Skip Handler
                 if (introStart != null && introEnd != null)
                   ValueListenableBuilder<Duration>(
                     valueListenable: _positionNotifier,

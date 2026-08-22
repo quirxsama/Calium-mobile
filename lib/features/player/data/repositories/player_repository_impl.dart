@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:calium_stream/core/error/exceptions.dart';
 import 'package:calium_stream/core/error/failures.dart';
 import 'package:calium_stream/features/player/data/datasources/player_remote_datasource.dart';
+import 'package:calium_stream/features/player/domain/entities/intro_song_entity.dart';
 import 'package:calium_stream/features/player/domain/entities/video_source_entity.dart';
 import 'package:calium_stream/features/player/domain/repositories/player_repository.dart';
 
@@ -31,6 +32,32 @@ class PlayerRepositoryImpl implements PlayerRepository {
       return Left(ServerFailure(message: e.message));
     } on NetworkException catch (e) {
       return Left(NetworkFailure(message: e.message));
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, IntroSongEntity?>> getIntroSong({
+    required String animeId,
+    required String episodeId,
+    String? animeName,
+    int? season,
+    int? episode,
+    int? introStart,
+    String? streamUrl,
+  }) async {
+    try {
+      final song = await _remoteDataSource.getIntroSong(
+        animeId: animeId,
+        episodeId: episodeId,
+        animeName: animeName,
+        season: season,
+        episode: episode,
+        introStart: introStart,
+        streamUrl: streamUrl,
+      );
+      return Right(song);
     } catch (e) {
       return Left(ServerFailure(message: e.toString()));
     }

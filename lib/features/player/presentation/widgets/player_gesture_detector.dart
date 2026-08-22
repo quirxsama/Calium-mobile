@@ -3,11 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
-import 'package:calium_stream/core/theme/app_spacing.dart';
-import 'package:calium_stream/core/theme/app_typography.dart';
-import 'package:calium_stream/core/utils/duration_formatter.dart';
 
-enum ActiveGestureType { none, brightness, volume, horizontalScrub, longPressSpeed }
+enum ActiveGestureType { none, brightness, volume, longPressSpeed }
 
 class PlayerGestureDetector extends StatefulWidget {
   const PlayerGestureDetector({
@@ -23,7 +20,6 @@ class PlayerGestureDetector extends StatefulWidget {
     required this.onLongPressEnd,
     required this.onBrightnessChanged,
     required this.onVolumeChanged,
-    required this.onSeek,
     this.initialBrightness = 1.0,
     this.initialVolume = 100.0,
     super.key,
@@ -41,7 +37,6 @@ class PlayerGestureDetector extends StatefulWidget {
   final VoidCallback onLongPressEnd;
   final ValueChanged<double> onBrightnessChanged;
   final ValueChanged<double> onVolumeChanged;
-  final ValueChanged<Duration> onSeek;
   final double initialBrightness;
   final double initialVolume;
 
@@ -62,9 +57,6 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
   ActiveGestureType _activeGesture = ActiveGestureType.none;
   double _brightness = 1.0;
   double _volume = 100.0;
-  Duration _scrubTargetPosition = Duration.zero;
-  Duration _scrubStartPosition = Duration.zero;
-  Duration _scrubDelta = Duration.zero;
 
   // Tap position tracking
   Offset _lastDoubleTapPosition = Offset.zero;
@@ -178,7 +170,6 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
     _dragStartOffset = details.localPosition;
     _isDragging = false;
     _activeGesture = ActiveGestureType.none;
-    _scrubStartPosition = widget.currentPosition;
     _dismissOverlayTimer?.cancel();
   }
 
@@ -188,12 +179,9 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
     final dx = details.localPosition.dx - _dragStartOffset.dx;
     final dy = details.localPosition.dy - _dragStartOffset.dy;
 
-    // Detect gesture direction if not locked into one
+    // Detect vertical gesture direction only (brightness on left, volume on right)
     if (!_isDragging) {
-      if (dx.abs() > 20 && dx.abs() > dy.abs()) {
-        _isDragging = true;
-        _activeGesture = ActiveGestureType.horizontalScrub;
-      } else if (dy.abs() > 20) {
+      if (dy.abs() > 20 && dy.abs() > dx.abs()) {
         _isDragging = true;
         final isLeft = _dragStartOffset.dx < (constraints.maxWidth / 2);
         _activeGesture = isLeft ? ActiveGestureType.brightness : ActiveGestureType.volume;
@@ -212,26 +200,11 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
       final newVolume = (_volume + delta).clamp(0.0, 100.0);
       setState(() => _volume = newVolume);
       widget.onVolumeChanged(newVolume);
-    } else if (_activeGesture == ActiveGestureType.horizontalScrub) {
-      final scrubSeconds = (dx * 0.35).round();
-      final totalMs = widget.totalDuration.inMilliseconds;
-      if (totalMs > 0) {
-        final newMs = (_scrubStartPosition.inMilliseconds + (scrubSeconds * 1000)).clamp(0, totalMs);
-        final target = Duration(milliseconds: newMs);
-        setState(() {
-          _scrubTargetPosition = target;
-          _scrubDelta = Duration(seconds: scrubSeconds);
-        });
-      }
     }
   }
 
   void _onPanEnd(DragEndDetails details) {
     if (widget.isLocked) return;
-
-    if (_activeGesture == ActiveGestureType.horizontalScrub) {
-      widget.onSeek(_scrubTargetPosition);
-    }
 
     _isDragging = false;
     _dismissOverlayTimer = Timer(const Duration(milliseconds: 600), () {
@@ -345,67 +318,6 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
                       : (_volume > 0 ? Icons.volume_down_rounded : Icons.volume_mute_rounded),
                   percentage: _volume / 100.0,
                   label: '${_volume.round()}%',
-                ),
-              ),
-
-            // ─── Horizontal Scrub Center Bubble ──────────────────────────────
-            if (_activeGesture == ActiveGestureType.horizontalScrub)
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withAlpha(220),
-                    borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
-                    border: Border.all(color: AppColors.primary.withAlpha(150)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(150),
-                        blurRadius: 20,
-                        spreadRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _scrubDelta.inSeconds >= 0
-                                ? Icons.fast_forward_rounded
-                                : Icons.fast_rewind_rounded,
-                            color: AppColors.primary,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _scrubTargetPosition.toMinSecString(),
-                            style: AppTypography.headlineMedium.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 22,
-                            ),
-                          ),
-                          Text(
-                            ' / ${widget.totalDuration.toMinSecString()}',
-                            style: AppTypography.titleSmall.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '(${_scrubDelta.inSeconds >= 0 ? '+' : ''}${_scrubDelta.inSeconds} sn)',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
           ],

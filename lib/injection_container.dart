@@ -31,6 +31,7 @@ import 'package:calium_stream/features/anime_details/domain/usecases/get_cast_us
 import 'package:calium_stream/features/player/data/datasources/player_remote_datasource.dart';
 import 'package:calium_stream/features/player/data/repositories/player_repository_impl.dart';
 import 'package:calium_stream/features/player/domain/repositories/player_repository.dart';
+import 'package:calium_stream/features/player/domain/usecases/get_intro_song_usecase.dart';
 import 'package:calium_stream/features/player/domain/usecases/get_video_sources_usecase.dart';
 import 'package:calium_stream/features/player/presentation/cubit/player_cubit.dart';
 import 'package:calium_stream/features/search/data/datasources/search_remote_datasource.dart';
@@ -154,8 +155,12 @@ Future<void> initDependencies() async {
     () => PlayerRepositoryImpl(remoteDataSource: sl()),
   );
   sl.registerLazySingleton(() => GetVideoSourcesUseCase(repository: sl()));
+  sl.registerLazySingleton(() => GetIntroSongUseCase(repository: sl()));
   sl.registerFactory(
-    () => PlayerCubit(getVideoSourcesUseCase: sl()),
+    () => PlayerCubit(
+      getVideoSourcesUseCase: sl(),
+      getIntroSongUseCase: sl(),
+    ),
   );
 
   // ─── Search ───────────────────────────────────────────────

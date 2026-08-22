@@ -297,7 +297,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                                               ),
                                               onPressed: () {
                                                 context.push(
-                                                  '/watch/${task.animeId}?title=${Uri.encodeComponent(task.animeTitle)}&episode=${Uri.encodeComponent(task.episodeTitle)}&s=${task.seasonNumber}&ep=${task.episodeNumber}&poster=${Uri.encodeComponent(task.posterUrl)}',
+                                                  '/watch/${task.animeId}?title=${Uri.encodeComponent(task.animeTitle)}&episode=${Uri.encodeComponent(task.episodeTitle)}&s=${task.seasonNumber}&ep=${task.episodeNumber}&poster=${Uri.encodeComponent(task.posterUrl)}&url=${Uri.encodeComponent(task.savePath)}',
                                                 );
                                               },
                                             )

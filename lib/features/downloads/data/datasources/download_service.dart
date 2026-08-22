@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:calium_stream/core/constants/api_constants.dart';
 import 'package:calium_stream/features/player/domain/usecases/get_video_sources_usecase.dart';
 
 enum DownloadStatus { pending, resolving, downloading, completed, failed, paused }
@@ -142,6 +143,11 @@ class DownloadService {
       StreamController<List<DownloadTaskEntity>>.broadcast();
   final Map<String, CancelToken> _cancelTokens = {};
   final Dio _dio = Dio(BaseOptions(
+    headers: {
+      'User-Agent': ApiConstants.userAgent,
+      'Referer': ApiConstants.referer,
+      'Origin': ApiConstants.origin,
+    },
     connectTimeout: const Duration(seconds: 30),
     receiveTimeout: const Duration(minutes: 30),
   ));
@@ -152,14 +158,24 @@ class DownloadService {
   Stream<List<DownloadTaskEntity>> get tasksStream => _tasksController.stream;
   List<DownloadTaskEntity> get currentTasks => List.unmodifiable(_tasks);
 
-  /// Initialize: load persisted tasks from Hive
+  /// Initialize: load persisted tasks from Hive and validate file integrity
   Future<void> init() async {
     final box = await Hive.openBox(_boxName);
     for (final key in box.keys) {
       try {
         final map = Map<String, dynamic>.from(box.get(key) as Map);
         final task = DownloadTaskEntity.fromMap(map);
-        // Reset downloading/resolving tasks to pending on restart
+        
+        // Validate completed tasks have non-empty, existing video files (> 100KB)
+        if (task.status == DownloadStatus.completed) {
+          final file = File(task.savePath);
+          if (!file.existsSync() || file.lengthSync() < 100 * 1024) {
+            _tasks.add(task.copyWith(status: DownloadStatus.failed));
+            continue;
+          }
+        }
+
+        // Reset downloading/resolving tasks to paused on restart
         if (task.status == DownloadStatus.downloading || task.status == DownloadStatus.resolving) {
           _tasks.add(task.copyWith(status: DownloadStatus.paused));
         } else {
@@ -343,6 +359,13 @@ class DownloadService {
       await _dio.download(
         resolvedUrl,
         savePath,
+        options: Options(
+          headers: {
+            'User-Agent': ApiConstants.userAgent,
+            'Referer': ApiConstants.referer,
+            'Origin': ApiConstants.origin,
+          },
+        ),
         cancelToken: cancelToken,
         onReceiveProgress: (received, total) {
           if (total != -1) {
@@ -368,9 +391,28 @@ class DownloadService {
         },
       );
 
-      final finishIdx = _tasks.indexWhere((t) => t.id == task.id);
-      if (finishIdx != -1) {
-        _updateTask(finishIdx, status: DownloadStatus.completed, progress: 1.0);
+      final downloadedFile = File(savePath);
+      final validSize = downloadedFile.existsSync() ? downloadedFile.lengthSync() : 0;
+      if (validSize < 100 * 1024) {
+        // Less than 100KB is invalid / 403 error page
+        try {
+          if (downloadedFile.existsSync()) downloadedFile.deleteSync();
+        } catch (_) {}
+        final failIdx = _tasks.indexWhere((t) => t.id == task.id);
+        if (failIdx != -1) {
+          _updateTask(failIdx, status: DownloadStatus.failed);
+        }
+      } else {
+        final finishIdx = _tasks.indexWhere((t) => t.id == task.id);
+        if (finishIdx != -1) {
+          _updateTask(
+            finishIdx,
+            status: DownloadStatus.completed,
+            progress: 1.0,
+            receivedBytes: validSize,
+            totalBytes: validSize,
+          );
+        }
       }
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
@@ -404,6 +446,8 @@ class DownloadService {
     String? quality,
     String? audioName,
     String? savePath,
+    int? receivedBytes,
+    int? totalBytes,
   }) {
     if (index < 0 || index >= _tasks.length) return;
     _tasks[index] = _tasks[index].copyWith(
@@ -414,6 +458,8 @@ class DownloadService {
       quality: quality,
       audioName: audioName,
       savePath: savePath,
+      receivedBytes: receivedBytes,
+      totalBytes: totalBytes,
     );
     _notify();
     _persistTask(_tasks[index]);

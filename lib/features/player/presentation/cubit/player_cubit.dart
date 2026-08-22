@@ -3,7 +3,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
+import 'package:calium_stream/features/player/domain/entities/intro_song_entity.dart';
 import 'package:calium_stream/features/player/domain/entities/video_source_entity.dart';
+import 'package:calium_stream/features/player/domain/usecases/get_intro_song_usecase.dart';
 import 'package:calium_stream/features/player/domain/usecases/get_video_sources_usecase.dart';
 
 sealed class PlayerState extends Equatable {
@@ -23,6 +25,7 @@ final class PlayerReady extends PlayerState {
     required this.selectedAudioGroup,
     required this.selectedStream,
     this.selectedSubtitle,
+    this.introSong,
     this.playbackSpeed = 1.0,
     this.isFitCover = false,
   });
@@ -31,6 +34,7 @@ final class PlayerReady extends PlayerState {
   final AudioGroupEntity selectedAudioGroup;
   final VideoStreamItemEntity selectedStream;
   final SubtitleTrackEntity? selectedSubtitle;
+  final IntroSongEntity? introSong;
   final double playbackSpeed;
   final bool isFitCover;
 
@@ -40,6 +44,8 @@ final class PlayerReady extends PlayerState {
     VideoStreamItemEntity? selectedStream,
     SubtitleTrackEntity? selectedSubtitle,
     bool clearSubtitle = false,
+    IntroSongEntity? introSong,
+    bool clearIntroSong = false,
     double? playbackSpeed,
     bool? isFitCover,
   }) {
@@ -48,6 +54,7 @@ final class PlayerReady extends PlayerState {
       selectedAudioGroup: selectedAudioGroup ?? this.selectedAudioGroup,
       selectedStream: selectedStream ?? this.selectedStream,
       selectedSubtitle: clearSubtitle ? null : (selectedSubtitle ?? this.selectedSubtitle),
+      introSong: clearIntroSong ? null : (introSong ?? this.introSong),
       playbackSpeed: playbackSpeed ?? this.playbackSpeed,
       isFitCover: isFitCover ?? this.isFitCover,
     );
@@ -59,6 +66,7 @@ final class PlayerReady extends PlayerState {
         selectedAudioGroup,
         selectedStream,
         selectedSubtitle,
+        introSong,
         playbackSpeed,
         isFitCover,
       ];
@@ -74,11 +82,13 @@ final class PlayerError extends PlayerState {
 }
 
 class PlayerCubit extends Cubit<PlayerState> {
-  PlayerCubit({required this._getVideoSourcesUseCase})
-      :
-        super(PlayerInitial());
+  PlayerCubit({
+    required this._getVideoSourcesUseCase,
+    required this._getIntroSongUseCase,
+  }) : super(PlayerInitial());
 
   final GetVideoSourcesUseCase _getVideoSourcesUseCase;
+  final GetIntroSongUseCase _getIntroSongUseCase;
 
   Future<void> loadVideoSources({
     required String animeId,
@@ -191,6 +201,38 @@ class PlayerCubit extends Cubit<PlayerState> {
             selectedSubtitle: initialSubtitle,
           ),
         );
+      },
+    );
+  }
+
+  Future<void> loadIntroSong({
+    required String animeId,
+    required String episodeId,
+    String? animeName,
+    int? season,
+    int? episode,
+    int? introStart,
+    String? streamUrl,
+  }) async {
+    final result = await _getIntroSongUseCase(
+      GetIntroSongParams(
+        animeId: animeId,
+        episodeId: episodeId,
+        animeName: animeName,
+        season: season,
+        episode: episode,
+        introStart: introStart,
+        streamUrl: streamUrl,
+      ),
+    );
+
+    result.fold(
+      (_) => null,
+      (song) {
+        if (state is PlayerReady && song != null) {
+          final curr = state as PlayerReady;
+          emit(curr.copyWith(introSong: song));
+        }
       },
     );
   }
