@@ -136,6 +136,9 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   Timer? _introSongFadeTimer;
   String _lastIntroSongEpisodeKey = '';
   bool _hasScrobbledCurrentEpisode = false;
+  int _reconnectAttempts = 0;
+  bool _isReconnecting = false;
+  Timer? _bufferingWatchdogTimer;
 
   final List<StreamSubscription> _subscriptions = [];
 
@@ -281,7 +284,36 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         }
       }),
       _player.stream.buffering.listen((buffering) {
-        if (mounted) setState(() => _isBuffering = buffering);
+        if (!mounted) return;
+        setState(() => _isBuffering = buffering);
+
+        if (buffering) {
+          if (_isPlaying &&
+              _currentStreamUrl.isNotEmpty &&
+              !_currentStreamUrl.startsWith('/') &&
+              !_currentStreamUrl.startsWith('file://')) {
+            _bufferingWatchdogTimer?.cancel();
+            _bufferingWatchdogTimer = Timer(const Duration(seconds: 8), () {
+              if (mounted && _isBuffering) {
+                _triggerAutoReconnect();
+              }
+            });
+          }
+        } else {
+          _bufferingWatchdogTimer?.cancel();
+          _bufferingWatchdogTimer = null;
+          if (_isReconnecting) {
+            setState(() {
+              _isReconnecting = false;
+              _reconnectAttempts = 0;
+            });
+          }
+        }
+      }),
+      _player.stream.error.listen((err) {
+        if (mounted && _currentStreamUrl.isNotEmpty && !_currentStreamUrl.startsWith('/') && !_currentStreamUrl.startsWith('file://')) {
+          _triggerAutoReconnect();
+        }
       }),
       _player.stream.volume.listen((vol) {
         if (mounted) setState(() => _volume = vol);
@@ -302,6 +334,49 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
 
     _loadSeasonEpisodes();
     _resetControlsTimer();
+  }
+
+  Future<void> _triggerAutoReconnect() async {
+    if (!mounted || _isReconnecting || _currentStreamUrl.isEmpty) return;
+    if (_reconnectAttempts >= 3) {
+      if (mounted) {
+        setState(() {
+          _isReconnecting = false;
+          _isBuffering = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Yayın bağlantısı koptu. Lütfen internetinizi kontrol edip tekrar deneyin.'),
+            backgroundColor: AppColors.accentCrimson,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Tekrar Dene',
+              textColor: Colors.white,
+              onPressed: () {
+                setState(() => _reconnectAttempts = 0);
+                _triggerAutoReconnect();
+              },
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    _reconnectAttempts++;
+    setState(() => _isReconnecting = true);
+
+    final savedPos = _position;
+    await _player.stop();
+    await Future.delayed(const Duration(milliseconds: 600));
+
+    if (mounted) {
+      _initialResumeTarget = savedPos;
+      final cubitState = context.read<PlayerCubit>().state;
+      if (cubitState is PlayerReady) {
+        _playStream(cubitState.selectedStream.url, cubitState.selectedSubtitle);
+      }
+    }
   }
 
   void _saveCurrentProgress(Duration pos) {
@@ -707,6 +782,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     try {
       GetIt.I<SyncService>().syncNow();
     } catch (_) {}
+    _bufferingWatchdogTimer?.cancel();
     _introSongFadeTimer?.cancel();
     _controlsTimer?.cancel();
     _autoNextTimer?.cancel();
@@ -935,8 +1011,40 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                     ),
                   ),
 
-                // 3. Buffering Spinner
-                if (_isBuffering)
+                // 3. Buffering / Auto-Reconnecting Indicator
+                if (_isReconnecting)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withAlpha(220),
+                        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+                        border: Border.all(color: AppColors.primary, width: 1.2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withAlpha(80),
+                            blurRadius: 16,
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Yeniden bağlanılıyor... ($_reconnectAttempts/3)',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (_isBuffering)
                   const Center(
                     child: CircularProgressIndicator(color: AppColors.primary),
                   ),
