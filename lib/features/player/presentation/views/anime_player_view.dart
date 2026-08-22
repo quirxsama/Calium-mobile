@@ -711,27 +711,68 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: PopScope(
-        canPop: true,
-        onPopInvokedWithResult: (didPop, result) async {
-          await _player.stop();
-          _saveCurrentProgress(_position);
-          try {
-            GetIt.I<SyncService>().syncNow();
-          } catch (_) {}
-          await SystemChrome.setPreferredOrientations([
-            DeviceOrientation.portraitUp,
-            DeviceOrientation.portraitDown,
-          ]);
-          await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-        },
-        child: BlocConsumer<PlayerCubit, PlayerState>(
-          listener: (context, state) {
-            if (state is PlayerReady) {
-              _playStream(state.selectedStream.url, state.selectedSubtitle);
-              _fetchIntroSongIfNeeded(context, state);
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (event is KeyDownEvent) {
+            final key = event.logicalKey;
+            if (key == LogicalKeyboardKey.select ||
+                key == LogicalKeyboardKey.space ||
+                key == LogicalKeyboardKey.enter ||
+                key == LogicalKeyboardKey.gameButtonA ||
+                key == LogicalKeyboardKey.mediaPlayPause ||
+                key == LogicalKeyboardKey.mediaPlay ||
+                key == LogicalKeyboardKey.mediaPause) {
+              _player.playOrPause();
+              _toggleControls();
+              return KeyEventResult.handled;
+            } else if (key == LogicalKeyboardKey.arrowLeft ||
+                key == LogicalKeyboardKey.mediaRewind ||
+                key == LogicalKeyboardKey.mediaTrackPrevious) {
+              final target = _position - const Duration(seconds: 10);
+              _player.seek(target < Duration.zero ? Duration.zero : target);
+              return KeyEventResult.handled;
+            } else if (key == LogicalKeyboardKey.arrowRight ||
+                key == LogicalKeyboardKey.mediaFastForward ||
+                key == LogicalKeyboardKey.mediaTrackNext) {
+              final target = _position + const Duration(seconds: 10);
+              _player.seek(target > _duration ? _duration : target);
+              return KeyEventResult.handled;
+            } else if (key == LogicalKeyboardKey.arrowUp) {
+              final newVol = (_volume + 5.0).clamp(0.0, 100.0);
+              setState(() => _volume = newVol);
+              _player.setVolume(newVol);
+              return KeyEventResult.handled;
+            } else if (key == LogicalKeyboardKey.arrowDown) {
+              final newVol = (_volume - 5.0).clamp(0.0, 100.0);
+              setState(() => _volume = newVol);
+              _player.setVolume(newVol);
+              return KeyEventResult.handled;
             }
+          }
+          return KeyEventResult.ignored;
+        },
+        child: PopScope(
+          canPop: true,
+          onPopInvokedWithResult: (didPop, result) async {
+            await _player.stop();
+            _saveCurrentProgress(_position);
+            try {
+              GetIt.I<SyncService>().syncNow();
+            } catch (_) {}
+            await SystemChrome.setPreferredOrientations([
+              DeviceOrientation.portraitUp,
+              DeviceOrientation.portraitDown,
+            ]);
+            await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
           },
+          child: BlocConsumer<PlayerCubit, PlayerState>(
+            listener: (context, state) {
+              if (state is PlayerReady) {
+                _playStream(state.selectedStream.url, state.selectedSubtitle);
+                _fetchIntroSongIfNeeded(context, state);
+              }
+            },
         builder: (context, state) {
           if (state is PlayerLoading || state is PlayerInitial) {
             return const Center(
@@ -1158,6 +1199,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
 
           return const SizedBox.shrink();
         },
+      ),
       ),
       ),
     );
