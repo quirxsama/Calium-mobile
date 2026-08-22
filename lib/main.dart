@@ -9,7 +9,7 @@ import 'package:calium_stream/app/observer.dart';
 import 'package:calium_stream/injection_container.dart';
 
 import 'package:calium_stream/core/services/sync_service.dart';
-
+import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
 
 void main() async {
@@ -41,6 +41,9 @@ void main() async {
 
   // Initialize download service and restore offline download queue
   await DownloadService.instance.init();
+
+  // Initialize AniList & MyAnimeList tracking service
+  await TrackingService.instance.init();
 
   // Register all dependencies via GetIt
   await initDependencies();

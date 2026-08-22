@@ -9,6 +9,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import 'package:calium_stream/core/constants/api_constants.dart';
 import 'package:calium_stream/core/services/sync_service.dart';
+import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
@@ -134,6 +135,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   bool _isIntroSongFadingOut = false;
   Timer? _introSongFadeTimer;
   String _lastIntroSongEpisodeKey = '';
+  bool _hasScrobbledCurrentEpisode = false;
 
   final List<StreamSubscription> _subscriptions = [];
 
@@ -352,6 +354,19 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       duration: _duration,
       episodeThumb: episodeThumb,
     );
+
+    // Auto-scrobble to AniList & MyAnimeList when >= 85% watched
+    if (_duration.inSeconds > 60 && !_hasScrobbledCurrentEpisode) {
+      final ratio = pos.inMilliseconds / _duration.inMilliseconds;
+      if (ratio >= 0.85) {
+        _hasScrobbledCurrentEpisode = true;
+        TrackingService.instance.scrobbleEpisode(
+          animeTitle: widget.animeTitle,
+          episode: _currentEpisodeNumber,
+          isCompleted: ratio >= 0.95,
+        );
+      }
+    }
   }
 
   Future<void> _loadSeasonEpisodes() async {
@@ -548,6 +563,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _isDismissedIntroSong = false;
       _isIntroSongFadingOut = false;
       _lastIntroSongEpisodeKey = '';
+      _hasScrobbledCurrentEpisode = false;
     });
 
     _introSongFadeTimer?.cancel();

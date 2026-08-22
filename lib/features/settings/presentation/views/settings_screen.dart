@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
+import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:calium_stream/features/settings/presentation/bloc/settings_bloc.dart';
 
@@ -86,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       },
       child: DefaultTabController(
-        length: 4,
+        length: 5,
         child: Scaffold(
           backgroundColor: AppColors.background,
           appBar: AppBar(
@@ -109,6 +111,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Tab(text: 'Profil'),
                 Tab(text: 'Gizlilik'),
                 Tab(text: 'Oynatıcı'),
+                Tab(text: 'Bağlantılar (AniList & MAL)'),
                 Tab(text: 'Güvenlik'),
               ],
             ),
@@ -131,7 +134,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     // ─── 3. Oynatıcı Tercihleri Sekmesi ────────────────
                     _buildPlayerPreferencesTab(),
 
-                    // ─── 4. Güvenlik & Hesap Sekmesi ───────────────────
+                    // ─── 4. AniList & MAL Bağlantıları ─────────────────
+                    _buildIntegrationsTab(),
+
+                    // ─── 5. Güvenlik & Hesap Sekmesi ───────────────────
                     _buildSecurityTab(),
                   ],
                 ),
@@ -458,6 +464,449 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildIntegrationsTab() {
+    final tracking = TrackingService.instance;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.screenPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Global Auto Scrobble Toggle
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+              border: Border.all(color: AppColors.border, width: 0.8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Otomatik Bölüm Senkronizasyonu',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Bir bölümün en az %85\'i izlendiğinde bağlı hesaplarınızdaki izleme geçmişi otomatik güncellenir.',
+                        style: TextStyle(color: AppColors.textSecondary.withAlpha(200), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: tracking.autoScrobble,
+                  activeThumbColor: AppColors.primary,
+                  onChanged: (val) {
+                    setState(() {
+                      tracking.setAutoScrobble(val);
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+
+          // ─── 1. AniList Integration Card ──────────────────────────
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(AppSpacing.borderRadiusLg),
+              border: Border.all(
+                color: tracking.isAniListConnected ? const Color(0xFF02A9FF).withAlpha(120) : AppColors.border,
+                width: 1.2,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF02A9FF).withAlpha(35),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'AL',
+                          style: TextStyle(color: Color(0xFF02A9FF), fontWeight: FontWeight.w900, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'AniList',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          Text(
+                            tracking.isAniListConnected ? 'Bağlantı Aktif' : 'Bağlı Değil',
+                            style: TextStyle(
+                              color: tracking.isAniListConnected ? AppColors.successGreen : AppColors.textMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (tracking.isAniListConnected)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.successGreen.withAlpha(35),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle_rounded, color: AppColors.successGreen, size: 14),
+                            SizedBox(width: 4),
+                            Text('Bağlandı', style: TextStyle(color: AppColors.successGreen, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                if (tracking.isAniListConnected) ...[
+                  if (tracking.aniListUser != null) ...[
+                    Row(
+                      children: [
+                        if (tracking.aniListUser!['avatar']?['medium'] != null)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.network(
+                              tracking.aniListUser!['avatar']['medium'],
+                              width: 32,
+                              height: 32,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '@${tracking.aniListUser!['name'] ?? ''}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.link_off_rounded, color: AppColors.accentCrimson, size: 18),
+                      label: const Text('AniList Bağlantısını Kes', style: TextStyle(color: AppColors.accentCrimson)),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.accentCrimson.withAlpha(120)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () async {
+                        await tracking.disconnectAniList();
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ] else ...[
+                  const Text(
+                    'İzlediğiniz bölümleri, puanlarınızı ve anime durumunuzu AniList profilinizle anlık senkronize edin.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.login_rounded, size: 18),
+                      label: const Text('AniList Token ile Bağlan', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF02A9FF),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () => _showTokenInputDialog(
+                        title: 'AniList Bağlantısı',
+                        hintText: 'AniList OAuth Personal Token yapıştırın...',
+                        infoUrl: 'https://anilist.co/api/v2/oauth/authorize?client_id=19349&response_type=token',
+                        infoUrlLabel: 'AniList Token Al (Web Sayfası Aç)',
+                        onConnect: (token) async {
+                          final ok = await tracking.connectAniList(token);
+                          if (ok && mounted) {
+                            setState(() {});
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('AniList hesabı başarıyla bağlandı!'), backgroundColor: AppColors.successGreen),
+                            );
+                          } else if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('AniList bağlantısı başarısız. Lütfen tokenı kontrol edin.'), backgroundColor: AppColors.accentCrimson),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+
+          // ─── 2. MyAnimeList (MAL) Integration Card ─────────────────
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(AppSpacing.borderRadiusLg),
+              border: Border.all(
+                color: tracking.isMalConnected ? const Color(0xFF2E51A2).withAlpha(120) : AppColors.border,
+                width: 1.2,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2E51A2).withAlpha(35),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'MAL',
+                          style: TextStyle(color: Color(0xFF2E51A2), fontWeight: FontWeight.w900, fontSize: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'MyAnimeList (MAL)',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          Text(
+                            tracking.isMalConnected ? 'Bağlantı Aktif' : 'Bağlı Değil',
+                            style: TextStyle(
+                              color: tracking.isMalConnected ? AppColors.successGreen : AppColors.textMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (tracking.isMalConnected)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.successGreen.withAlpha(35),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle_rounded, color: AppColors.successGreen, size: 14),
+                            SizedBox(width: 4),
+                            Text('Bağlandı', style: TextStyle(color: AppColors.successGreen, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                if (tracking.isMalConnected) ...[
+                  if (tracking.malUser != null) ...[
+                    Row(
+                      children: [
+                        if (tracking.malUser!['picture'] != null)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.network(
+                              tracking.malUser!['picture'],
+                              width: 32,
+                              height: 32,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '@${tracking.malUser!['name'] ?? ''}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.link_off_rounded, color: AppColors.accentCrimson, size: 18),
+                      label: const Text('MyAnimeList Bağlantısını Kes', style: TextStyle(color: AppColors.accentCrimson)),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppColors.accentCrimson.withAlpha(120)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () async {
+                        await tracking.disconnectMal();
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ] else ...[
+                  const Text(
+                    'İzleme listenizi MyAnimeList hesabınızla otomatik olarak güncel tutun.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.login_rounded, size: 18),
+                      label: const Text('MAL Token ile Bağlan', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E51A2),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () => _showTokenInputDialog(
+                        title: 'MyAnimeList Bağlantısı',
+                        hintText: 'MAL Access Token yapıştırın...',
+                        onConnect: (token) async {
+                          final ok = await tracking.connectMal(token);
+                          if (ok && mounted) {
+                            setState(() {});
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('MyAnimeList hesabı başarıyla bağlandı!'), backgroundColor: AppColors.successGreen),
+                            );
+                          } else if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('MAL bağlantısı başarısız. Lütfen tokenı kontrol edin.'), backgroundColor: AppColors.accentCrimson),
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTokenInputDialog({
+    required String title,
+    required String hintText,
+    String? infoUrl,
+    String? infoUrlLabel,
+    required Future<void> Function(String token) onConnect,
+  }) {
+    final controller = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.surfaceDark,
+          title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (infoUrl != null) ...[
+                GestureDetector(
+                  onTap: () async {
+                    try {
+                      final uri = Uri.parse(infoUrl);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    } catch (_) {}
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF02A9FF).withAlpha(30),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.open_in_new_rounded, color: Color(0xFF02A9FF), size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            infoUrlLabel ?? 'Token Al',
+                            style: const TextStyle(color: Color(0xFF02A9FF), fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              TextField(
+                controller: controller,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: hintText,
+                  hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  filled: true,
+                  fillColor: AppColors.surfaceElevated,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Vazgeç', style: TextStyle(color: AppColors.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.black),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final token = controller.text.trim();
+                      if (token.isEmpty) return;
+                      setDialogState(() => isSubmitting = true);
+                      await onConnect(token);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    },
+              child: isSubmitting
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                  : const Text('Bağla', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
       ),
     );
   }
