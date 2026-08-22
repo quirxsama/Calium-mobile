@@ -53,10 +53,13 @@ class _IntroSongBadgeState extends State<IntroSongBadge>
     if (widget.song.spotifyUrl.isEmpty) return;
     try {
       final uri = Uri.parse(widget.song.spotifyUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (_) {}
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      try {
+        final uri = Uri.parse(widget.song.spotifyUrl);
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      } catch (_) {}
+    }
   }
 
   @override

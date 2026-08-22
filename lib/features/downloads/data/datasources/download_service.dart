@@ -170,14 +170,18 @@ class DownloadService {
         if (task.status == DownloadStatus.completed) {
           final file = File(task.savePath);
           if (!file.existsSync() || file.lengthSync() < 100 * 1024) {
-            _tasks.add(task.copyWith(status: DownloadStatus.failed));
+            final failedTask = task.copyWith(status: DownloadStatus.failed);
+            _tasks.add(failedTask);
+            await box.put(key, failedTask.toMap());
             continue;
           }
         }
 
         // Reset downloading/resolving tasks to paused on restart
         if (task.status == DownloadStatus.downloading || task.status == DownloadStatus.resolving) {
-          _tasks.add(task.copyWith(status: DownloadStatus.paused));
+          final pausedTask = task.copyWith(status: DownloadStatus.paused);
+          _tasks.add(pausedTask);
+          await box.put(key, pausedTask.toMap());
         } else {
           _tasks.add(task);
         }

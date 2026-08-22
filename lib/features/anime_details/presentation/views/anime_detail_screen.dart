@@ -54,9 +54,11 @@ class _AnimeDetailView extends StatefulWidget {
 }
 
 class _AnimeDetailViewState extends State<_AnimeDetailView> {
+  static final Map<String, Color> _paletteCache = {};
+
   bool _isSynopsisExpanded = false;
   Color _dynamicAccentColor = AppColors.primary;
-  Color _dynamicGlowColor = AppColors.primary.withAlpha(45);
+  Color _dynamicGlowColor = Colors.transparent;
   String? _lastExtractedPoster;
 
   void _extractPalette(String? imageUrl) {
@@ -64,15 +66,29 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
     _lastExtractedPoster = imageUrl;
 
     final fullUrl = imageUrl.startsWith('http') ? imageUrl : 'https://calium.fun$imageUrl';
+
+    // 1. Check in-memory cache for instant 0ms coloring
+    if (_paletteCache.containsKey(fullUrl)) {
+      final cachedColor = _paletteCache[fullUrl]!;
+      _dynamicAccentColor = cachedColor;
+      _dynamicGlowColor = cachedColor.withAlpha(70);
+      return;
+    }
+
+    // 2. Fast downsampled palette extraction (64x64, 8 colors)
     PaletteGenerator.fromImageProvider(
       CachedNetworkImageProvider(fullUrl),
-      maximumColorCount: 16,
+      size: const Size(64, 64),
+      maximumColorCount: 8,
     ).then((palette) {
       if (!mounted) return;
       final dominant = palette.vibrantColor?.color ??
           palette.dominantColor?.color ??
           palette.lightVibrantColor?.color ??
           AppColors.primary;
+
+      _paletteCache[fullUrl] = dominant;
+
       setState(() {
         _dynamicAccentColor = dominant;
         _dynamicGlowColor = dominant.withAlpha(70);
@@ -85,8 +101,8 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: AnimatedContainer(
-        duration: const Duration(milliseconds: 700),
-        curve: Curves.easeInOutCubic,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
           color: AppColors.background,
           gradient: RadialGradient(

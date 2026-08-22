@@ -88,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       },
       child: DefaultTabController(
-        length: 5,
+        length: 6,
         child: Scaffold(
           backgroundColor: AppColors.background,
           appBar: AppBar(
@@ -113,6 +113,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Tab(text: 'Oynatıcı'),
                 Tab(text: 'Bağlantılar (AniList & MAL)'),
                 Tab(text: 'Güvenlik'),
+                Tab(text: 'Hakkında & Geliştirici'),
               ],
             ),
           ),
@@ -139,6 +140,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                     // ─── 5. Güvenlik & Hesap Sekmesi ───────────────────
                     _buildSecurityTab(),
+
+                    // ─── 6. Hakkında & Geliştirici Sekmesi ─────────────
+                    _buildAboutAndDeveloperTab(),
                   ],
                 ),
         ),
@@ -793,7 +797,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       onPressed: () => _showTokenInputDialog(
                         title: 'MyAnimeList Bağlantısı',
-                        hintText: 'MAL Access Token yapıştırın...',
+                        hintText: 'MAL Access Token veya URL yapıştırın...',
+                        infoUrl: 'https://myanimelist.net/apiconfig/references/authorization_code',
+                        infoUrlLabel: 'MAL API Yetkilendirme Sayfası (Web Aç)',
                         onConnect: (token) async {
                           final ok = await tracking.connectMal(token);
                           if (ok && mounted) {
@@ -815,6 +821,202 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      try {
+        final uri = Uri.parse(url);
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Bağlantı açılamadı: $url'), backgroundColor: AppColors.accentCrimson),
+          );
+        }
+      }
+    }
+  }
+
+  String _extractTokenFromInput(String input) {
+    final trimmed = input.trim();
+    if (trimmed.contains('access_token=')) {
+      final match = RegExp(r'access_token=([a-zA-Z0-9_\.\-]+)').firstMatch(trimmed);
+      if (match != null && match.group(1) != null) {
+        return match.group(1)!;
+      }
+    }
+    return trimmed;
+  }
+
+  Widget _buildAboutAndDeveloperTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.screenPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // App Header Card
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primary.withAlpha(40),
+                  AppColors.surfaceElevated,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(AppSpacing.borderRadiusLg),
+              border: Border.all(color: AppColors.primary.withAlpha(70), width: 1),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withAlpha(120),
+                        blurRadius: 16,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.play_arrow_rounded, color: Colors.black, size: 36),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Calium Mobile',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'v1.1.2 (Beta) • Libmpv Video Engine',
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      ),
+                      const SizedBox(height: 2),
+                      Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withAlpha(30),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Hardware Acceleration: Active (Vulkan/OpenGL ES)',
+                          style: TextStyle(color: AppColors.primary, fontSize: 10.5, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+
+          // Developer & Community Links
+          Text('Geliştirici & Topluluk Bağlantıları', style: AppTypography.titleMedium),
+          const SizedBox(height: AppSpacing.md),
+
+          _buildLinkTile(
+            icon: Icons.language_rounded,
+            title: 'Resmi Web Sitesi',
+            subtitle: 'calium.fun',
+            url: 'https://calium.fun',
+          ),
+          const SizedBox(height: 10),
+
+          _buildLinkTile(
+            icon: Icons.code_rounded,
+            title: 'GitHub Kaynak Kodu & Geliştirici',
+            subtitle: 'github.com/calium-app',
+            url: 'https://github.com/calium-app',
+          ),
+          const SizedBox(height: 10),
+
+          _buildLinkTile(
+            icon: Icons.discord_rounded,
+            title: 'Discord Topluluğu',
+            subtitle: 'discord.gg/calium',
+            url: 'https://discord.gg/calium',
+          ),
+          const SizedBox(height: 10),
+
+          _buildLinkTile(
+            icon: Icons.api_rounded,
+            title: 'Anizium Video API',
+            subtitle: 'anizium.com',
+            url: 'https://anizium.com',
+          ),
+          const SizedBox(height: AppSpacing.lg),
+
+          // Open Source Notice
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+              border: Border.all(color: AppColors.border, width: 0.8),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.favorite_rounded, color: AppColors.primary, size: 20),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Calium açık kaynaklı ve topluluk destekli bir anime streaming projesidir.',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLinkTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String url,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+        border: Border.all(color: AppColors.border, width: 0.8),
+      ),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withAlpha(25),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: AppColors.primary, size: 20),
+        ),
+        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+        subtitle: Text(subtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+        trailing: const Icon(Icons.open_in_new_rounded, color: Colors.white60, size: 18),
+        onTap: () => _openExternalUrl(url),
       ),
     );
   }
@@ -841,14 +1043,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               if (infoUrl != null) ...[
                 GestureDetector(
-                  onTap: () async {
-                    try {
-                      final uri = Uri.parse(infoUrl);
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
-                    } catch (_) {}
-                  },
+                  onTap: () => _openExternalUrl(infoUrl),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
@@ -861,7 +1056,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            infoUrlLabel ?? 'Token Al',
+                            infoUrlLabel ?? 'Yetkilendirme Sayfasını Aç (URL)',
                             style: const TextStyle(color: Color(0xFF02A9FF), fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -876,7 +1071,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 maxLines: 2,
                 decoration: InputDecoration(
-                  hintText: hintText,
+                  hintText: '$hintText\n(Tam URL veya token yapıştırabilirsiniz)',
                   hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                   filled: true,
                   fillColor: AppColors.surfaceElevated,
@@ -895,7 +1090,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onPressed: isSubmitting
                   ? null
                   : () async {
-                      final token = controller.text.trim();
+                      final rawInput = controller.text.trim();
+                      if (rawInput.isEmpty) return;
+                      final token = _extractTokenFromInput(rawInput);
                       if (token.isEmpty) return;
                       setDialogState(() => isSubmitting = true);
                       await onConnect(token);

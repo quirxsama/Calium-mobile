@@ -177,7 +177,7 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
                           style: AppTypography.titleMedium.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.w700,
-                            fontSize: 15,
+                            fontSize: 14,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -186,7 +186,7 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
                           widget.episodeTitle,
                           style: AppTypography.bodySmall.copyWith(
                             color: AppColors.textSecondary,
-                            fontSize: 12,
+                            fontSize: 11,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -194,70 +194,85 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
                       ],
                     ),
                   ),
+                  const SizedBox(width: AppSpacing.sm),
 
-                  // Episodes Drawer Button
-                  if (widget.onOpenEpisodesModal != null)
-                    _buildQuickBadge(
-                      icon: Icons.view_list_rounded,
-                      label: 'Bölümler',
-                      onTap: widget.onOpenEpisodesModal!,
+                  // Quick Setting Badges (Horizontally scrollable to prevent overflow)
+                  Flexible(
+                    flex: 0,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Episodes Drawer Button
+                          if (widget.onOpenEpisodesModal != null) ...[
+                            _buildQuickBadge(
+                              icon: Icons.view_list_rounded,
+                              label: 'Bölümler',
+                              onTap: widget.onOpenEpisodesModal!,
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+
+                          // Audio / Dub Selector Chip
+                          _buildQuickBadge(
+                            icon: Icons.record_voice_over_outlined,
+                            label: widget.selectedAudioName,
+                            onTap: widget.onOpenAudioModal,
+                          ),
+                          const SizedBox(width: 6),
+
+                          // Quality Selector Chip
+                          _buildQuickBadge(
+                            icon: Icons.hd_outlined,
+                            label: widget.selectedQuality,
+                            onTap: widget.onOpenQualityModal,
+                          ),
+                          const SizedBox(width: 6),
+
+                          // Subtitle Selector Chip
+                          _buildQuickBadge(
+                            icon: Icons.subtitles_outlined,
+                            label: widget.selectedSubtitleName ?? 'Kapalı',
+                            onTap: widget.onOpenSubtitleModal,
+                          ),
+                          const SizedBox(width: 6),
+
+                          // Speed Selector Chip
+                          _buildQuickBadge(
+                            icon: Icons.speed_rounded,
+                            label: '${widget.playbackSpeed}x',
+                            onTap: widget.onOpenSpeedModal,
+                          ),
+                          const SizedBox(width: 6),
+
+                          // Aspect Ratio Toggle
+                          IconButton(
+                            tooltip: widget.isFitCover ? 'Ekrana Sığdır' : 'Ekranı Doldur',
+                            icon: Icon(
+                              widget.isFitCover
+                                  ? Icons.fit_screen_rounded
+                                  : Icons.aspect_ratio_rounded,
+                              color: widget.isFitCover ? AppColors.primary : Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: widget.onToggleAspectRatio,
+                          ),
+
+                          // Lock Screen Button
+                          IconButton(
+                            tooltip: 'Ekranı Kilitle',
+                            icon: const Icon(
+                              Icons.lock_outline_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: widget.onToggleLock,
+                          ),
+                        ],
+                      ),
                     ),
-                  const SizedBox(width: AppSpacing.xs),
-
-                  // Audio / Dub Selector Chip
-                  _buildQuickBadge(
-                    icon: Icons.record_voice_over_outlined,
-                    label: widget.selectedAudioName,
-                    onTap: widget.onOpenAudioModal,
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-
-                  // Quality Selector Chip
-                  _buildQuickBadge(
-                    icon: Icons.hd_outlined,
-                    label: widget.selectedQuality,
-                    onTap: widget.onOpenQualityModal,
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-
-                  // Subtitle Selector Chip
-                  _buildQuickBadge(
-                    icon: Icons.subtitles_outlined,
-                    label: widget.selectedSubtitleName ?? 'Kapalı',
-                    onTap: widget.onOpenSubtitleModal,
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-
-                  // Speed Selector Chip
-                  _buildQuickBadge(
-                    icon: Icons.speed_rounded,
-                    label: '${widget.playbackSpeed}x',
-                    onTap: widget.onOpenSpeedModal,
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-
-                  // Aspect Ratio Toggle
-                  IconButton(
-                    tooltip: widget.isFitCover ? 'Ekrana Sığdır' : 'Ekranı Doldur',
-                    icon: Icon(
-                      widget.isFitCover
-                          ? Icons.fit_screen_rounded
-                          : Icons.aspect_ratio_rounded,
-                      color: widget.isFitCover ? AppColors.primary : Colors.white,
-                      size: 20,
-                    ),
-                    onPressed: widget.onToggleAspectRatio,
-                  ),
-
-                  // Lock Screen Button
-                  IconButton(
-                    tooltip: 'Ekranı Kilitle',
-                    icon: const Icon(
-                      Icons.lock_outline_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                    onPressed: widget.onToggleLock,
                   ),
                 ],
               ),
@@ -506,12 +521,17 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
           children: [
             Icon(icon, size: 14, color: AppColors.primary),
             const SizedBox(width: 5),
-            Text(
-              label,
-              style: AppTypography.caption.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 11,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 110),
+              child: Text(
+                label,
+                style: AppTypography.caption.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

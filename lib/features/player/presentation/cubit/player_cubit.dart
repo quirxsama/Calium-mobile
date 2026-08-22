@@ -105,37 +105,53 @@ class PlayerCubit extends Cubit<PlayerState> {
       final tasks = DownloadService.instance.currentTasks;
       for (final t in tasks) {
         final matches = (t.id == taskId || (t.animeId == animeId && t.seasonNumber == season && t.episodeNumber == episode));
-        if (matches && t.status == DownloadStatus.completed && t.savePath.isNotEmpty && File(t.savePath).existsSync()) {
-          targetPath = t.savePath;
-          break;
+        if (matches && t.status == DownloadStatus.completed && t.savePath.isNotEmpty) {
+          final file = File(t.savePath);
+          if (file.existsSync() && file.lengthSync() > 100 * 1024) {
+            targetPath = t.savePath;
+            break;
+          } else {
+            // Bad or 0-byte file from earlier, cleanup corrupt file and task
+            try {
+              if (file.existsSync()) file.deleteSync();
+            } catch (_) {}
+            DownloadService.instance.removeTask(t.id);
+          }
         }
       }
     }
 
-    if (targetPath != null && targetPath.isNotEmpty && File(targetPath).existsSync()) {
-      final localStream = VideoStreamItemEntity(
-        quality: 'Çevrimdışı (Yerel İndirme)',
-        url: targetPath,
-        type: 'file',
-      );
-      final localAudio = AudioGroupEntity(
-        name: 'Yerel İndirme',
-        group: 'local',
-        streams: [localStream],
-      );
-      final syntheticSource = EpisodeSourceEntity(
-        audioGroups: [localAudio],
-        subtitles: const [],
-      );
+    if (targetPath != null && targetPath.isNotEmpty) {
+      final file = File(targetPath);
+      if (file.existsSync() && file.lengthSync() > 100 * 1024) {
+        final localStream = VideoStreamItemEntity(
+          quality: 'Çevrimdışı (Yerel İndirme)',
+          url: targetPath,
+          type: 'file',
+        );
+        final localAudio = AudioGroupEntity(
+          name: 'Yerel İndirme',
+          group: 'local',
+          streams: [localStream],
+        );
+        final syntheticSource = EpisodeSourceEntity(
+          audioGroups: [localAudio],
+          subtitles: const [],
+        );
 
-      emit(
-        PlayerReady(
-          sourceData: syntheticSource,
-          selectedAudioGroup: localAudio,
-          selectedStream: localStream,
-        ),
-      );
-      return;
+        emit(
+          PlayerReady(
+            sourceData: syntheticSource,
+            selectedAudioGroup: localAudio,
+            selectedStream: localStream,
+          ),
+        );
+        return;
+      } else {
+        try {
+          if (file.existsSync()) file.deleteSync();
+        } catch (_) {}
+      }
     }
 
     final result = await _getVideoSourcesUseCase(

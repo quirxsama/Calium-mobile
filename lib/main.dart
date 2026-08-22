@@ -8,6 +8,7 @@ import 'package:calium_stream/app/app.dart';
 import 'package:calium_stream/app/observer.dart';
 import 'package:calium_stream/injection_container.dart';
 
+import 'package:calium_stream/core/services/notification_service.dart';
 import 'package:calium_stream/core/services/sync_service.dart';
 import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
@@ -44,6 +45,9 @@ void main() async {
 
   // Initialize AniList & MyAnimeList tracking service
   await TrackingService.instance.init();
+
+  // Initialize notifications and request permissions
+  await NotificationService.instance.init();
 
   // Register all dependencies via GetIt
   await initDependencies();

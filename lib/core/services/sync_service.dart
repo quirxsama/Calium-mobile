@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:calium_stream/core/constants/storage_keys.dart';
+import 'package:calium_stream/core/services/notification_service.dart';
 import 'package:calium_stream/core/services/sync_remote_datasource.dart';
 import 'package:calium_stream/features/anime_details/domain/repositories/anime_detail_repository.dart';
 import 'package:calium_stream/features/auth/domain/entities/user_entity.dart';
@@ -349,24 +350,51 @@ class SyncService with WidgetsBindingObserver {
 
   Future<void> _checkFavoriteAnimeUpdates() async {
     try {
-      final favoritesBox = Hive.box('favorites');
-      if (favoritesBox.isEmpty) return;
-
-      final latest = await _remoteDataSource.getLatestEpisodes();
-      if (latest.isEmpty) return;
-
       final prefsBox = Hive.box('preferences');
+      final favoritesBox = Hive.box('favorites');
 
-      for (final ep in latest) {
-        final animeId = ep['animeId']?.toString() ?? ep['id']?.toString() ?? '';
-        final animeTitle = ep['animeTitle']?.toString() ?? ep['name']?.toString() ?? '';
-        final episodeNumber = ep['episodeNumber']?.toString() ?? ep['episode']?.toString() ?? '';
+      // 1. Check for new episodes of favorite anime
+      if (favoritesBox.isNotEmpty) {
+        final latest = await _remoteDataSource.getLatestEpisodes();
+        for (final ep in latest) {
+          final animeId = ep['animeId']?.toString() ?? ep['id']?.toString() ?? '';
+          final animeTitle = ep['animeTitle']?.toString() ?? ep['name']?.toString() ?? '';
+          final episodeNumber = ep['episodeNumber']?.toString() ?? ep['episode']?.toString() ?? '';
 
-        if (animeId.isNotEmpty && favoritesBox.containsKey(animeId)) {
-          final notifiedKey = 'notified_ep_${animeId}_$episodeNumber';
-          if (!prefsBox.containsKey(notifiedKey)) {
-            await prefsBox.put(notifiedKey, DateTime.now().millisecondsSinceEpoch);
-            debugPrint('🔔 Favori Anime Yeni Bölüm: $animeTitle - Bölüm $episodeNumber');
+          if (animeId.isNotEmpty && favoritesBox.containsKey(animeId)) {
+            final notifiedKey = 'notified_ep_${animeId}_$episodeNumber';
+            if (!prefsBox.containsKey(notifiedKey)) {
+              await prefsBox.put(notifiedKey, DateTime.now().millisecondsSinceEpoch);
+              debugPrint('🔔 Favori Anime Yeni Bölüm: $animeTitle - Bölüm $episodeNumber');
+              
+              final notifId = (animeId.hashCode ^ episodeNumber.hashCode).abs() % 100000;
+              await NotificationService.instance.showEpisodeNotification(
+                id: notifId,
+                animeTitle: animeTitle,
+                episodeNumber: episodeNumber,
+                animeId: animeId,
+              );
+            }
+          }
+        }
+      }
+
+      // 2. Check for incoming social notifications
+      final notifs = await _remoteDataSource.getNotifications();
+      for (final n in notifs) {
+        final id = n['id']?.toString() ?? '';
+        final read = n['read'] == true || n['readAt'] != null;
+        if (!read && id.isNotEmpty) {
+          final sKey = 'notified_soc_$id';
+          if (!prefsBox.containsKey(sKey)) {
+            await prefsBox.put(sKey, DateTime.now().millisecondsSinceEpoch);
+            final title = n['title']?.toString() ?? 'Calium';
+            final body = n['body']?.toString() ?? n['message']?.toString() ?? 'Yeni bir bildiriminiz var.';
+            await NotificationService.instance.showSocialNotification(
+              id: id.hashCode.abs() % 100000,
+              title: title,
+              body: body,
+            );
           }
         }
       }
