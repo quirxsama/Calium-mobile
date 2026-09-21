@@ -31,6 +31,7 @@ class EpisodeDetailSheet extends StatelessWidget {
   }
 
   void _downloadEpisode(BuildContext context) {
+    Navigator.of(context).pop();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

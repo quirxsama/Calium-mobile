@@ -23,6 +23,8 @@ class AnimeRail extends StatelessWidget {
   Widget build(BuildContext context) {
     if (animes.isEmpty) return const SizedBox.shrink();
 
+    final wide = MediaQuery.sizeOf(context).width >= 600;
+    final posterWidth = wide ? 164.0 : 140.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -31,14 +33,14 @@ class AnimeRail extends StatelessWidget {
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.screenPadding,
           ),
-          child: SectionHeader(
-            title: title,
-            onSeeAll: onSeeAll,
-          ),
+          child: SectionHeader(title: title, onSeeAll: onSeeAll),
         ),
         const SizedBox(height: AppSpacing.md),
         SizedBox(
-          height: 240,
+          height:
+              posterWidth / 0.7 +
+              MediaQuery.textScalerOf(context).scale(14) * 2.6 +
+              12,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.screenPadding,
@@ -63,7 +65,7 @@ class AnimeRail extends StatelessWidget {
                 fallbackUrls: fallbacks,
                 rating: anime.rating,
                 episodeBadge: anime.currentEpisode,
-                width: AppSpacing.posterWidth,
+                width: posterWidth,
                 onTap: () => context.go('/anime/${anime.id}'),
               );
             },

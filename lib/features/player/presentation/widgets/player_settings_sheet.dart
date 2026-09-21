@@ -4,7 +4,7 @@ import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/features/player/domain/entities/video_source_entity.dart';
 
-class PlayerSettingsSheet extends StatelessWidget {
+class PlayerSettingsSheet extends StatefulWidget {
   const PlayerSettingsSheet({
     required this.audioGroups,
     required this.selectedAudioGroup,
@@ -55,14 +55,46 @@ class PlayerSettingsSheet extends StatelessWidget {
   };
 
   @override
+  State<PlayerSettingsSheet> createState() => _PlayerSettingsSheetState();
+}
+
+class _PlayerSettingsSheetState extends State<PlayerSettingsSheet> {
+  late bool _autoSkipIntro;
+  late bool _autoNextEpisode;
+  late bool _isFitCover;
+  late AudioGroupEntity _selectedAudioGroup;
+  late VideoStreamItemEntity _selectedStream;
+  late SubtitleTrackEntity? _selectedSubtitle;
+  late int _subtitleSize;
+  late double _playbackSpeed;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoSkipIntro = widget.autoSkipIntro;
+    _autoNextEpisode = widget.autoNextEpisode;
+    _isFitCover = widget.isFitCover;
+    _selectedAudioGroup = widget.selectedAudioGroup;
+    _selectedStream = widget.selectedStream;
+    _selectedSubtitle = widget.selectedSubtitle;
+    _subtitleSize = widget.subtitleSize;
+    _playbackSpeed = widget.playbackSpeed;
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.surfaceDark,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.borderRadiusXl)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.borderRadiusXl),
+        ),
         border: Border(top: BorderSide(color: AppColors.border, width: 1)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.lg),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xl,
+        vertical: AppSpacing.lg,
+      ),
       child: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -85,10 +117,16 @@ class PlayerSettingsSheet extends StatelessWidget {
                 children: [
                   Text(
                     'Oynatıcı Ayarları',
-                    style: AppTypography.headlineMedium.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: AppTypography.headlineMedium.copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: AppColors.textSecondary,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -96,19 +134,20 @@ class PlayerSettingsSheet extends StatelessWidget {
               const SizedBox(height: AppSpacing.md),
 
               // ─── 1. Ses / Dublaj ────────────────────────────────────
-              if (audioGroups.length > 1) ...[
+              if (widget.audioGroups.length > 1) ...[
                 _buildSectionTitle('Ses / Dublaj Dili'),
                 const SizedBox(height: AppSpacing.sm),
                 Wrap(
                   spacing: 10,
                   runSpacing: 8,
-                  children: audioGroups.map((group) {
-                    final isSelected = group == selectedAudioGroup;
+                  children: widget.audioGroups.map((group) {
+                    final isSelected = group == _selectedAudioGroup;
                     return _buildOptionChip(
                       label: group.name,
                       isSelected: isSelected,
                       onTap: () {
-                        onAudioGroupSelected(group);
+                        setState(() => _selectedAudioGroup = group);
+                        widget.onAudioGroupSelected(group);
                         Navigator.pop(context);
                       },
                     );
@@ -123,13 +162,14 @@ class PlayerSettingsSheet extends StatelessWidget {
               Wrap(
                 spacing: 10,
                 runSpacing: 8,
-                children: selectedAudioGroup.streams.map((stream) {
-                  final isSelected = stream.quality == selectedStream.quality;
+                children: _selectedAudioGroup.streams.map((stream) {
+                  final isSelected = stream.quality == _selectedStream.quality;
                   return _buildOptionChip(
                     label: stream.quality,
                     isSelected: isSelected,
                     onTap: () {
-                      onQualitySelected(stream);
+                      setState(() => _selectedStream = stream);
+                      widget.onQualitySelected(stream);
                       Navigator.pop(context);
                     },
                   );
@@ -146,19 +186,21 @@ class PlayerSettingsSheet extends StatelessWidget {
                 children: [
                   _buildOptionChip(
                     label: 'Kapalı',
-                    isSelected: selectedSubtitle == null,
+                    isSelected: _selectedSubtitle == null,
                     onTap: () {
-                      onSubtitleSelected(null);
+                      setState(() => _selectedSubtitle = null);
+                      widget.onSubtitleSelected(null);
                       Navigator.pop(context);
                     },
                   ),
-                  ...subtitles.map((sub) {
-                    final isSelected = selectedSubtitle == sub;
+                  ...widget.subtitles.map((sub) {
+                    final isSelected = _selectedSubtitle == sub;
                     return _buildOptionChip(
                       label: sub.name,
                       isSelected: isSelected,
                       onTap: () {
-                        onSubtitleSelected(sub);
+                        setState(() => _selectedSubtitle = sub);
+                        widget.onSubtitleSelected(sub);
                         Navigator.pop(context);
                       },
                     );
@@ -173,13 +215,16 @@ class PlayerSettingsSheet extends StatelessWidget {
               Wrap(
                 spacing: 10,
                 runSpacing: 8,
-                children: _subtitleSizes.entries.map((entry) {
-                  final isSelected = subtitleSize == entry.value;
+                children: PlayerSettingsSheet._subtitleSizes.entries.map((
+                  entry,
+                ) {
+                  final isSelected = _subtitleSize == entry.value;
                   return _buildOptionChip(
                     label: entry.key,
                     isSelected: isSelected,
                     onTap: () {
-                      onSubtitleSizeChanged(entry.value);
+                      setState(() => _subtitleSize = entry.value);
+                      widget.onSubtitleSizeChanged(entry.value);
                       Navigator.pop(context);
                     },
                   );
@@ -193,13 +238,14 @@ class PlayerSettingsSheet extends StatelessWidget {
               Wrap(
                 spacing: 10,
                 runSpacing: 8,
-                children: _speeds.map((speed) {
-                  final isSelected = (playbackSpeed - speed).abs() < 0.01;
+                children: PlayerSettingsSheet._speeds.map((speed) {
+                  final isSelected = (_playbackSpeed - speed).abs() < 0.01;
                   return _buildOptionChip(
                     label: '${speed}x',
                     isSelected: isSelected,
                     onTap: () {
-                      onSpeedSelected(speed);
+                      setState(() => _playbackSpeed = speed);
+                      widget.onSpeedSelected(speed);
                       Navigator.pop(context);
                     },
                   );
@@ -214,45 +260,96 @@ class PlayerSettingsSheet extends StatelessWidget {
               Container(
                 decoration: BoxDecoration(
                   color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+                  borderRadius: BorderRadius.circular(
+                    AppSpacing.borderRadiusMd,
+                  ),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Column(
                   children: [
                     SwitchListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                      title: const Text('İntroyu Otomatik Atla', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
-                      subtitle: const Text('Açılış introsu algılandığında elle basmadan atlar', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
-                      value: autoSkipIntro,
-                      activeThumbColor: AppColors.primary,
-                      onChanged: (_) {
-                        onAutoSkipIntroToggled();
-                      },
-                    ),
-                    const Divider(color: AppColors.border, height: 1),
-                    SwitchListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                      title: const Text('Otomatik Sonraki Bölüm', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
-                      subtitle: const Text('Bölüm bittiğinde 5sn sayaçla sonraki bölüme geçer', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
-                      value: autoNextEpisode,
-                      activeThumbColor: AppColors.primary,
-                      onChanged: (_) {
-                        onAutoNextEpisodeToggled();
-                      },
-                    ),
-                    const Divider(color: AppColors.border, height: 1),
-                    SwitchListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                      title: const Text('Ekranı Doldur (Kırp / Zoom)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
-                      subtitle: Text(
-                        isFitCover ? 'Açık: Video siyah kenarlık olmadan tüm ekranı kaplar' : 'Kapalı: Orijinal en-boy oranı korunur',
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 2,
                       ),
-                      value: isFitCover,
+                      title: const Text(
+                        'İntroyu Otomatik Atla',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Açılış introsu algılandığında elle basmadan atlar',
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                      value: _autoSkipIntro,
                       activeThumbColor: AppColors.primary,
-                      onChanged: (_) {
-                        onFitCoverToggled();
-                        Navigator.pop(context);
+                      onChanged: (val) {
+                        setState(() => _autoSkipIntro = val);
+                        widget.onAutoSkipIntroToggled();
+                      },
+                    ),
+                    const Divider(color: AppColors.border, height: 1),
+                    SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 2,
+                      ),
+                      title: const Text(
+                        'Otomatik Sonraki Bölüm',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Bölüm bittiğinde 5sn sayaçla sonraki bölüme geçer',
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                      value: _autoNextEpisode,
+                      activeThumbColor: AppColors.primary,
+                      onChanged: (val) {
+                        setState(() => _autoNextEpisode = val);
+                        widget.onAutoNextEpisodeToggled();
+                      },
+                    ),
+                    const Divider(color: AppColors.border, height: 1),
+                    SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 2,
+                      ),
+                      title: const Text(
+                        'Ekranı Doldur (Kırp / Zoom)',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        _isFitCover
+                            ? 'Açık: Video siyah kenarlık olmadan tüm ekranı kaplar'
+                            : 'Kapalı: Orijinal en-boy oranı korunur',
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                        ),
+                      ),
+                      value: _isFitCover,
+                      activeThumbColor: AppColors.primary,
+                      onChanged: (val) {
+                        setState(() => _isFitCover = val);
+                        widget.onFitCoverToggled();
                       },
                     ),
                   ],
@@ -297,9 +394,8 @@ class PlayerSettingsSheet extends StatelessWidget {
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: AppColors.primary.withAlpha(80),
+                    color: AppColors.primary.withAlpha(50),
                     blurRadius: 10,
-                    spreadRadius: 1,
                   ),
                 ]
               : null,

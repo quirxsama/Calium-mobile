@@ -5,7 +5,7 @@ import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 
-/// A flexible, overflow-proof anime poster tile with Hero animation support.
+/// A focusable poster tile with consistent two-line titles.
 class AnimePosterCard extends StatelessWidget {
   const AnimePosterCard({
     required this.id,
@@ -35,52 +35,53 @@ class AnimePosterCard extends StatelessWidget {
       children: [
         // ── Poster Image (Expanded so it scales safely inside Grid/Flex) ──
         Expanded(
-          child: Hero(
-            tag: 'anime-poster-$id',
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  AppCachedImage(
-                    imageUrl: posterUrl,
-                    fallbackUrls: fallbackUrls,
-                    fit: BoxFit.cover,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                AppCachedImage(
+                  imageUrl: posterUrl,
+                  fallbackUrls: fallbackUrls,
+                  fit: BoxFit.cover,
+                ),
+
+                // Rating badge – top right
+                if (rating != null)
+                  Positioned(
+                    top: AppSpacing.xs,
+                    right: AppSpacing.xs,
+                    child: _RatingBadge(rating: rating!),
                   ),
 
-                  // Rating badge – top right
-                  if (rating != null)
-                    Positioned(
-                      top: AppSpacing.xs,
-                      right: AppSpacing.xs,
-                      child: _RatingBadge(rating: rating!),
-                    ),
-
-                  // Episode badge – bottom left
-                  if (episodeBadge != null)
-                    Positioned(
-                      bottom: AppSpacing.xs,
-                      left: AppSpacing.xs,
-                      child: _EpisodeBadge(label: episodeBadge!),
-                    ),
-                ],
-              ),
+                // Episode badge – bottom left
+                if (episodeBadge != null)
+                  Positioned(
+                    bottom: AppSpacing.xs,
+                    left: AppSpacing.xs,
+                    child: _EpisodeBadge(label: episodeBadge!),
+                  ),
+              ],
             ),
           ),
         ),
 
-        const SizedBox(height: 4),
+        const SizedBox(height: 10),
 
         // ── Title ────────────────────────────────────────────────
-        Text(
-          title,
-          style: AppTypography.bodySmall.copyWith(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w500,
-            fontSize: 12,
+        SizedBox(
+          height: MediaQuery.textScalerOf(context).scale(14) * 2.6,
+          child: Text(
+            title,
+            style: AppTypography.bodySmall.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+              height: 1.3,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
@@ -90,10 +91,17 @@ class AnimePosterCard extends StatelessWidget {
     }
 
     return RepaintBoundary(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: card,
+      child: Semantics(
+        button: onTap != null,
+        label: title,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+            onTap: onTap,
+            child: card,
+          ),
+        ),
       ),
     );
   }
@@ -126,10 +134,7 @@ class _RatingBadge extends StatelessWidget {
             color: AppColors.ratingAmber,
           ),
           const SizedBox(width: 2),
-          Text(
-            rating.toStringAsFixed(1),
-            style: AppTypography.badgeSmall,
-          ),
+          Text(rating.toStringAsFixed(1), style: AppTypography.badgeSmall),
         ],
       ),
     );
@@ -154,7 +159,9 @@ class _EpisodeBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: AppTypography.badgeSmall,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.badgeSmall.copyWith(color: AppColors.background),
       ),
     );
   }

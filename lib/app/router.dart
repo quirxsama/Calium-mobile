@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:calium_stream/core/theme/app_colors.dart';
+import 'package:calium_stream/core/widgets/app_navigation.dart';
 import 'package:calium_stream/features/auth/presentation/views/login_screen.dart';
 import 'package:calium_stream/features/auth/presentation/views/register_screen.dart';
 import 'package:calium_stream/features/home/presentation/views/home_screen.dart';
@@ -27,58 +27,34 @@ class _MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: navigationShell.currentIndex,
-        backgroundColor: AppColors.surfaceDark,
-        indicatorColor: AppColors.primaryGlow,
-        onDestinationSelected: (index) {
-          navigationShell.goBranch(
-            index,
-            initialLocation: index == navigationShell.currentIndex,
-          );
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined, color: AppColors.textSecondary),
-            selectedIcon: Icon(Icons.home_rounded, color: AppColors.primary),
-            label: 'Ana Sayfa',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.explore_outlined, color: AppColors.textSecondary),
-            selectedIcon: Icon(Icons.explore_rounded, color: AppColors.primary),
-            label: 'Keşfet',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.search_outlined, color: AppColors.textSecondary),
-            selectedIcon: Icon(Icons.search_rounded, color: AppColors.primary),
-            label: 'Ara',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline, color: AppColors.textSecondary),
-            selectedIcon: Icon(Icons.people_rounded, color: AppColors.primary),
-            label: 'Sosyal',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.video_library_outlined, color: AppColors.textSecondary),
-            selectedIcon: Icon(Icons.video_library_rounded, color: AppColors.primary),
-            label: 'Kitaplık',
-          ),
-        ],
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+    return AppNavigation(
+      selectedIndex: navigationShell.currentIndex,
+      onDestinationSelected: (index) => navigationShell.goBranch(
+        index,
+        initialLocation: index == navigationShell.currentIndex,
       ),
+      child: navigationShell,
     );
   }
 }
 
 class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
-  static final _shellNavigatorHomeKey = GlobalKey<NavigatorState>(debugLabel: 'home');
-  static final _shellNavigatorExploreKey = GlobalKey<NavigatorState>(debugLabel: 'explore');
-  static final _shellNavigatorSearchKey = GlobalKey<NavigatorState>(debugLabel: 'search');
-  static final _shellNavigatorSocialKey = GlobalKey<NavigatorState>(debugLabel: 'social');
-  static final _shellNavigatorLibraryKey = GlobalKey<NavigatorState>(debugLabel: 'library');
+  static final _shellNavigatorHomeKey = GlobalKey<NavigatorState>(
+    debugLabel: 'home',
+  );
+  static final _shellNavigatorExploreKey = GlobalKey<NavigatorState>(
+    debugLabel: 'explore',
+  );
+  static final _shellNavigatorSearchKey = GlobalKey<NavigatorState>(
+    debugLabel: 'search',
+  );
+  static final _shellNavigatorSocialKey = GlobalKey<NavigatorState>(
+    debugLabel: 'social',
+  );
+  static final _shellNavigatorLibraryKey = GlobalKey<NavigatorState>(
+    debugLabel: 'library',
+  );
 
   static final GoRouter router = GoRouter(
     navigatorKey: _rootNavigatorKey,
@@ -152,7 +128,13 @@ class AppRouter {
             routes: [
               GoRoute(
                 path: '/library',
-                builder: (context, state) => const LibraryScreen(),
+                builder: (context, state) {
+                  final tabStr = state.uri.queryParameters['tab'];
+                  final initialTab = tabStr == 'history' || tabStr == '2'
+                      ? 2
+                      : (tabStr == 'favorites' || tabStr == '1' ? 1 : 0);
+                  return LibraryScreen(initialTab: initialTab);
+                },
               ),
             ],
           ),
@@ -176,12 +158,16 @@ class AppRouter {
         builder: (context, state) {
           final animeId = state.pathParameters['animeId'] ?? '';
           final animeTitle = state.uri.queryParameters['title'] ?? 'Anime';
-          final episodeTitle = state.uri.queryParameters['episode'] ?? 'Bölüm 1';
-          final episodeId = state.uri.queryParameters['episodeId'] ??
+          final episodeTitle =
+              state.uri.queryParameters['episode'] ?? 'Bölüm 1';
+          final episodeId =
+              state.uri.queryParameters['episodeId'] ??
               state.uri.queryParameters['epId'] ??
               '';
-          final season = int.tryParse(state.uri.queryParameters['s'] ?? '1') ?? 1;
-          final episode = int.tryParse(state.uri.queryParameters['ep'] ?? '1') ?? 1;
+          final season =
+              int.tryParse(state.uri.queryParameters['s'] ?? '1') ?? 1;
+          final episode =
+              int.tryParse(state.uri.queryParameters['ep'] ?? '1') ?? 1;
           final streamUrl = state.uri.queryParameters['url'] ?? '';
           final posterUrl = state.uri.queryParameters['poster'] ?? '';
 
@@ -265,4 +251,3 @@ class AppRouter {
     ],
   );
 }
-

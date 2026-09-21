@@ -11,15 +11,15 @@ abstract class AppTypography {
   // ─── Headlines ────────────────────────────────────────────────────────
 
   static TextStyle headlineLarge = GoogleFonts.plusJakartaSans(
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: FontWeight.w800,
     color: AppColors.textPrimary,
     letterSpacing: -0.5,
   );
 
   static TextStyle headlineMedium = GoogleFonts.plusJakartaSans(
-    fontSize: 20,
-    fontWeight: FontWeight.w700,
+    fontSize: 22,
+    fontWeight: FontWeight.w800,
     color: AppColors.textPrimary,
   );
 
@@ -32,7 +32,7 @@ abstract class AppTypography {
   );
 
   static TextStyle titleSmall = GoogleFonts.plusJakartaSans(
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: FontWeight.w600,
     color: AppColors.textPrimary,
   );
@@ -54,7 +54,7 @@ abstract class AppTypography {
   );
 
   static TextStyle bodySmall = GoogleFonts.inter(
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: FontWeight.w400,
     color: AppColors.textSecondary,
   );
@@ -69,8 +69,8 @@ abstract class AppTypography {
   );
 
   static TextStyle caption = GoogleFonts.inter(
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: FontWeight.w500,
-    color: AppColors.textMuted,
+    color: AppColors.textSecondary,
   );
 }

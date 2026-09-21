@@ -7,10 +7,7 @@ import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/features/anime_details/domain/entities/cast_entity.dart';
 
 class CastCarousel extends StatelessWidget {
-  const CastCarousel({
-    required this.cast,
-    super.key,
-  });
+  const CastCarousel({required this.cast, super.key});
 
   final List<CastEntity> cast;
 
@@ -33,7 +30,7 @@ class CastCarousel extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         SizedBox(
-          height: 120,
+          height: 80 + MediaQuery.textScalerOf(context).scale(12) * 2.8,
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.screenPadding,
@@ -45,13 +42,14 @@ class CastCarousel extends StatelessWidget {
               final member = cast[index];
 
               return SizedBox(
-                width: 76,
+                width: 96,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Avatar
                     AppCachedImage(
-                      imageUrl: member.voiceActorImageUrl ?? member.characterImageUrl,
+                      imageUrl:
+                          member.voiceActorImageUrl ?? member.characterImageUrl,
                       width: 60,
                       height: 60,
                       fit: BoxFit.cover,
@@ -89,7 +87,7 @@ class CastCarousel extends StatelessWidget {
                         member.voiceActorName!,
                         style: AppTypography.caption.copyWith(
                           color: AppColors.textSecondary,
-                          fontSize: 9,
+                          fontSize: 11,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

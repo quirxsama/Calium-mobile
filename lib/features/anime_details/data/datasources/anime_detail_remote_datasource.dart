@@ -21,6 +21,16 @@ class AnimeDetailRemoteDataSourceImpl implements AnimeDetailRemoteDataSource {
 
   @override
   Future<AnimeDetailModel> getAnimeDetail(String animeId) async {
+    // 1. Try Calium proxy first (Cloudflare bypass & asset URLs)
+    try {
+      final response = await _dioClient.get('/api/anizium/anime/$animeId');
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        return AnimeDetailModel.fromJson(data);
+      }
+    } catch (_) {}
+
+    // 2. Direct Anizium API fallback
     try {
       final response = await _dioClient.get(
         '${ApiConstants.aniziumApiBaseUrl}/anime/get',

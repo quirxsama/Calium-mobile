@@ -52,13 +52,13 @@ final class CreateRoomRequested extends SocialEvent {
 
   @override
   List<Object?> get props => [
-        animeId,
-        animeName,
-        episodeId,
-        episodeName,
-        poster,
-        isPublic,
-      ];
+    animeId,
+    animeName,
+    episodeId,
+    episodeName,
+    poster,
+    isPublic,
+  ];
 }
 
 final class CloseRoomRequested extends SocialEvent {
@@ -91,6 +91,8 @@ final class RespondFollowRequestRequested extends SocialEvent {
 }
 
 final class MarkNotificationsReadRequested extends SocialEvent {}
+
+final class ClearNotificationsRequested extends SocialEvent {}
 
 // ─── States ─────────────────────────────────────────────────────
 
@@ -147,13 +149,13 @@ final class SocialLoaded extends SocialState {
 
   @override
   List<Object?> get props => [
-        rooms,
-        myRooms,
-        friends,
-        followRequests,
-        notifications,
-        selectedTab,
-      ];
+    rooms,
+    myRooms,
+    friends,
+    followRequests,
+    notifications,
+    selectedTab,
+  ];
 }
 
 final class SocialRoomJoinedState extends SocialState {
@@ -184,6 +186,7 @@ class SocialBloc extends Bloc<SocialEvent, SocialState> {
     on<LeaveRoomRequested>(_onLeaveRoom);
     on<RespondFollowRequestRequested>(_onRespondFollowRequest);
     on<MarkNotificationsReadRequested>(_onMarkNotificationsRead);
+    on<ClearNotificationsRequested>(_onClearNotifications);
   }
 
   final SocialRepository _repository;
@@ -192,7 +195,9 @@ class SocialBloc extends Bloc<SocialEvent, SocialState> {
     LoadSocialDataRequested event,
     Emitter<SocialState> emit,
   ) async {
-    final currentTab = (state is SocialLoaded) ? (state as SocialLoaded).selectedTab : 0;
+    final currentTab = (state is SocialLoaded)
+        ? (state as SocialLoaded).selectedTab
+        : 0;
     emit(SocialLoading());
 
     final roomsResult = await _repository.getPublicRooms();
@@ -219,10 +224,7 @@ class SocialBloc extends Bloc<SocialEvent, SocialState> {
     );
   }
 
-  void _onSwitchTab(
-    SwitchSocialTabRequested event,
-    Emitter<SocialState> emit,
-  ) {
+  void _onSwitchTab(SwitchSocialTabRequested event, Emitter<SocialState> emit) {
     if (state is SocialLoaded) {
       emit((state as SocialLoaded).copyWith(selectedTab: event.tabIndex));
     }
@@ -322,6 +324,17 @@ class SocialBloc extends Bloc<SocialEvent, SocialState> {
         );
       }).toList();
       emit(current.copyWith(notifications: updated));
+    }
+  }
+
+  Future<void> _onClearNotifications(
+    ClearNotificationsRequested event,
+    Emitter<SocialState> emit,
+  ) async {
+    await _repository.clearAllNotifications();
+    if (state is SocialLoaded) {
+      final current = state as SocialLoaded;
+      emit(current.copyWith(notifications: const []));
     }
   }
 }

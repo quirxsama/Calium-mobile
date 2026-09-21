@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-
 import 'package:calium_stream/core/theme/app_colors.dart';
-import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/utils/episode_utils.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/features/anime_details/domain/entities/anime_detail_entity.dart';
 import 'package:calium_stream/features/anime_details/domain/entities/episode_entity.dart';
+import 'package:calium_stream/features/downloads/presentation/widgets/download_options_sheet.dart';
 
 class EpisodeListWidget extends StatefulWidget {
   const EpisodeListWidget({
     required this.animeId,
+    this.animeTitle = '',
+    this.posterUrl = '',
     required this.seasons,
     required this.episodes,
     required this.selectedSeason,
@@ -20,400 +21,301 @@ class EpisodeListWidget extends StatefulWidget {
     this.onDirectPlay,
     super.key,
   });
-
   final String animeId;
+  final String animeTitle;
+  final String posterUrl;
   final List<SeasonEntity> seasons;
   final List<EpisodeEntity> episodes;
   final int selectedSeason;
   final ValueChanged<int> onSeasonChanged;
   final ValueChanged<EpisodeEntity> onEpisodeTap;
   final ValueChanged<EpisodeEntity>? onDirectPlay;
-
-
   @override
   State<EpisodeListWidget> createState() => _EpisodeListWidgetState();
 }
 
 class _EpisodeListWidgetState extends State<EpisodeListWidget> {
-  bool _isReversed = false;
-  String _searchQuery = '';
-  int _visibleChunk = 25;
+  final _search = TextEditingController();
+  bool _reversed = false;
+  int _visible = 25;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    // 1. Filter by search query
-    List<EpisodeEntity> filtered = widget.episodes.where((ep) {
-      if (_searchQuery.trim().isEmpty) return true;
-      final q = _searchQuery.trim().toLowerCase();
-      final numMatch = ep.episodeNumber.toString() == q || 'bölüm ${ep.episodeNumber}'.contains(q);
-      final titleMatch = ep.title?.toLowerCase().contains(q) ?? false;
-      return numMatch || titleMatch;
-    }).toList();
-
-    // 2. Sort (ascending vs descending)
-    if (_isReversed) {
-      filtered = filtered.reversed.toList();
-    }
-
-    // 3. Paginate / Chunk max 25 episodes
-    final displayedEpisodes = filtered.take(_visibleChunk).toList();
-    final hasMore = filtered.length > _visibleChunk;
-
-    // Read watch history from Hive
-    final historyBox = Hive.box('history');
-    final historyData = historyBox.get(widget.animeId) as Map?;
-    final lastWatchedSeason = historyData?['seasonNumber'] as int?;
-    final lastWatchedEp = historyData?['episodeNumber'] as int?;
-    final rawWatchProgress = (historyData?['progress'] as num?)?.toDouble() ?? 0.0;
-    final watchProgress =
-        (rawWatchProgress > 1.0 ? rawWatchProgress / 100.0 : rawWatchProgress).clamp(0.0, 1.0);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Season Tabs ─────────────────────────────────────────────
-        if (widget.seasons.length > 1) ...[
-          SizedBox(
-            height: 38,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.screenPadding,
-              ),
-              scrollDirection: Axis.horizontal,
-              itemCount: widget.seasons.length,
-              separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
-              itemBuilder: (context, index) {
-                final season = widget.seasons[index];
-                final isSelected = season.seasonNumber == widget.selectedSeason;
-
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _visibleChunk = 25;
-                      _searchQuery = '';
-                    });
-                    widget.onSeasonChanged(season.seasonNumber);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                      vertical: AppSpacing.xs,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.primary : AppColors.surfaceElevated,
-                      borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
-                    ),
-                    child: Center(
-                      child: Text(
-                        season.name,
-                        style: AppTypography.titleSmall.copyWith(
-                          color: isSelected ? Colors.white : AppColors.textSecondary,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+    final query = _search.text.trim().toLowerCase();
+    var filtered = widget.episodes
+        .where(
+          (episode) =>
+              query.isEmpty ||
+              episode.episodeNumber.toString() == query ||
+              'bölüm ${episode.episodeNumber}'.contains(query) ||
+              (episode.title?.toLowerCase().contains(query) ?? false),
+        )
+        .toList();
+    if (_reversed) filtered = filtered.reversed.toList();
+    final visible = filtered.take(_visible).toList();
+    return ValueListenableBuilder(
+      valueListenable: Hive.box('history').listenable(),
+      builder: (context, Box box, _) {
+        final rawHistory = box.get(widget.animeId);
+        final history = rawHistory is Map ? rawHistory : const {};
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.seasons.length > 1) ...[
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final season in widget.seasons)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(season.name),
+                          selected:
+                              season.seasonNumber == widget.selectedSeason,
+                          selectedColor: AppColors.primary,
+                          backgroundColor: AppColors.surfaceElevated,
+                          labelStyle: AppTypography.titleSmall.copyWith(
+                            color: season.seasonNumber == widget.selectedSeason
+                                ? AppColors.background
+                                : AppColors.textPrimary,
+                          ),
+                          onSelected: (selected) {
+                            if (selected) {
+                              setState(() {
+                                _visible = 25;
+                                _search.clear();
+                              });
+                              widget.onSeasonChanged(season.seasonNumber);
+                            }
+                          },
                         ),
                       ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-        ],
-
-        // ── Control Bar: Search & Sort Toggle ───────────────────────
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
-          child: Row(
-            children: [
-              // Episode Search Box
-              Expanded(
-                child: SizedBox(
-                  height: 36,
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            Row(
+              children: [
+                Expanded(
                   child: TextField(
-                    onChanged: (val) => setState(() => _searchQuery = val),
-                    style: AppTypography.bodySmall.copyWith(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Bölüm ara (örn. 12 veya isim)...',
-                      hintStyle: AppTypography.bodySmall.copyWith(color: AppColors.textMuted),
-                      prefixIcon: const Icon(Icons.search_rounded, size: 16, color: AppColors.textMuted),
-                      filled: true,
-                      fillColor: AppColors.surfaceElevated,
-                      contentPadding: EdgeInsets.zero,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
-                        borderSide: BorderSide.none,
+                    controller: _search,
+                    onChanged: (_) => setState(() => _visible = 25),
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'Bölüm ara',
+                      prefixIcon: Icon(Icons.search_rounded),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 14,
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-
-              // Sort Toggle Button
-              IconButton.filledTonal(
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.surfaceElevated,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
+                const SizedBox(width: 8),
+                IconButton.filledTonal(
+                  tooltip: _reversed
+                      ? 'İlk bölümden sırala'
+                      : 'Son bölümden sırala',
+                  onPressed: () => setState(() => _reversed = !_reversed),
+                  icon: Icon(
+                    _reversed
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded,
                   ),
                 ),
-                tooltip: _isReversed ? 'Sondan Başa (N → 1)' : 'Baştan Sona (1 → N)',
-                icon: Icon(
-                  _isReversed ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
-                  size: 18,
-                  color: AppColors.primary,
-                ),
-                onPressed: () => setState(() => _isReversed = !_isReversed),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: AppSpacing.md),
-
-        // ── Episodes List ───────────────────────────────────────────
-        if (widget.episodes.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(AppSpacing.xl),
-            child: Center(
-              child: Text(
-                'Bu sezonda henüz bölüm bulunmuyor.',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ),
-          )
-        else if (filtered.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(AppSpacing.xl),
-            child: Center(
-              child: Text(
-                'Aramanızla eşleşen bölüm bulunamadı.',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ),
-          )
-        else
-          ListView.separated(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenPadding,
-            ),
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: displayedEpisodes.length,
-            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, index) {
-              final episode = displayedEpisodes[index];
-              final isCurrentPlaying = lastWatchedSeason == widget.selectedSeason &&
-                  lastWatchedEp == episode.episodeNumber;
-
-              final epProgress = isCurrentPlaying ? watchProgress : (episode.watchProgress ?? 0.0);
-
-              return GestureDetector(
-                onTap: () => widget.onEpisodeTap(episode),
-                child: Container(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
-                  decoration: BoxDecoration(
-                    color: isCurrentPlaying
-                        ? AppColors.primary.withAlpha(20)
-                        : AppColors.surfaceDark,
-                    borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
-                    border: Border.all(
-                      color: isCurrentPlaying ? AppColors.primary : AppColors.border,
-                      width: isCurrentPlaying ? 1.0 : 0.5,
+                if (widget.episodes.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    tooltip: '${widget.selectedSeason}. sezonu indir',
+                    icon: const Icon(Icons.download_rounded),
+                    onPressed: () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => DownloadOptionsSheet(
+                        animeId: widget.animeId,
+                        animeTitle: widget.animeTitle,
+                        episodeTitle: '${widget.selectedSeason}. Sezon',
+                        episodeNumber: widget.episodes.first.episodeNumber,
+                        seasonNumber: widget.selectedSeason,
+                        posterUrl: widget.posterUrl,
+                        allSeasonEpisodes: widget.episodes,
+                      ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      // Thumbnail with direct play action
-                      GestureDetector(
-                        onTap: () {
-                          if (widget.onDirectPlay != null) {
-                            widget.onDirectPlay!(episode);
-                          } else {
-                            widget.onEpisodeTap(episode);
-                          }
-                        },
-                        child: SizedBox(
-                          width: 100,
-                          height: 60,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                AppCachedImage(
-                                  imageUrl: episode.thumbnailUrl,
-                                  fit: BoxFit.cover,
-                                  errorWidget: Container(
-                                    color: AppColors.surfaceElevated,
-                                    child: const Icon(
-                                      Icons.play_circle_outline,
-                                      color: AppColors.textMuted,
-                                    ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (visible.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  widget.episodes.isEmpty
+                      ? 'Bu sezonda henüz bölüm bulunmuyor.'
+                      : 'Aramanızla eşleşen bölüm bulunamadı.',
+                  style: AppTypography.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            for (final episode in visible) ...[
+              _episodeTile(episode, history),
+              const SizedBox(height: 12),
+            ],
+            if (filtered.length > _visible)
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _visible += 25),
+                icon: const Icon(Icons.expand_more_rounded),
+                label: Text('Daha fazla bölüm (${filtered.length - _visible})'),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _episodeTile(EpisodeEntity episode, Map history) {
+    final current =
+        history['seasonNumber'] == widget.selectedSeason &&
+        history['episodeNumber'] == episode.episodeNumber;
+    final rawProgress = current
+        ? (history['progress'] as num?)?.toDouble() ?? 0
+        : episode.watchProgress ?? 0;
+    final progress = (rawProgress > 1 ? rawProgress / 100 : rawProgress).clamp(
+      0.0,
+      1.0,
+    );
+    final label = EpisodeUtils.formatEpisodeLabel(
+      season: widget.selectedSeason,
+      episode: episode.episodeNumber,
+      title: episode.title,
+    );
+    return Material(
+      color: AppColors.surfaceDark,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: current ? AppColors.primary : AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => widget.onEpisodeTap(episode),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final thumbnailWidth = constraints.maxWidth >= 500
+                  ? 144.0
+                  : constraints.maxWidth < 300
+                  ? 76.0
+                  : 100.0;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    button: true,
+                    label: '$label oynat',
+                    child: InkWell(
+                      onTap: () =>
+                          (widget.onDirectPlay ?? widget.onEpisodeTap)(episode),
+                      child: SizedBox(
+                        width: thumbnailWidth,
+                        height: thumbnailWidth * .68,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              AppCachedImage(
+                                imageUrl: episode.thumbnailUrl,
+                                fit: BoxFit.cover,
+                              ),
+                              const Center(
+                                child: Icon(
+                                  Icons.play_circle_fill_rounded,
+                                  color: AppColors.textPrimary,
+                                  size: 32,
+                                ),
+                              ),
+                              if (progress > 0)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: LinearProgressIndicator(
+                                    value: progress,
+                                    minHeight: 3,
+                                    semanticsLabel: 'İzleme ilerlemesi',
                                   ),
                                 ),
-
-                                // Play Icon Overlay
-                                Center(
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.black45,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      isCurrentPlaying ? Icons.play_arrow_rounded : Icons.play_arrow_outlined,
-                                      color: isCurrentPlaying ? AppColors.primary : Colors.white,
-                                      size: 18,
-                                    ),
-                                  ),
-                                ),
-
-                                // Progress bar
-                                if (epProgress > 0.0)
-                                  Positioned(
-                                    left: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    child: LinearProgressIndicator(
-                                      value: epProgress,
-                                      backgroundColor: Colors.transparent,
-                                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                                      minHeight: 3,
-                                    ),
-                                  ),
-                              ],
-                            ),
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.md),
-
-                      // Details
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: AppTypography.titleSmall.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    EpisodeUtils.formatEpisodeLabel(
-                                      season: widget.selectedSeason,
-                                      episode: episode.episodeNumber,
-                                      title: episode.title,
-                                    ),
-                                    style: AppTypography.titleSmall.copyWith(
-                                      color: isCurrentPlaying ? AppColors.primary : AppColors.textPrimary,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                if (isCurrentPlaying) ...[
-                                  const SizedBox(width: AppSpacing.xs),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withAlpha(40),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      'KALINAN YER',
-                                      style: AppTypography.caption.copyWith(
-                                        fontSize: 9,
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                                if (episode.isFiller) ...[
-                                  const SizedBox(width: AppSpacing.xs),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surfaceElevated,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      'FILLER',
-                                      style: AppTypography.caption.copyWith(
-                                        fontSize: 9,
-                                        color: AppColors.textMuted,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            if (episode.overview != null && episode.overview!.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  episode.overview!,
-                                  style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                            if (current)
+                              Text(
+                                'Kaldığın yer',
+                                style: AppTypography.caption.copyWith(
+                                  color: AppColors.primary,
                                 ),
                               ),
-                            if (episode.duration != null) ...[
-                              const SizedBox(height: 2),
+                            if (episode.duration != null)
                               Text(
                                 '${(episode.duration! / 60).round()} dk',
                                 style: AppTypography.caption,
                               ),
-                            ],
+                            if (episode.isFiller)
+                              Text('Filler', style: AppTypography.caption),
                           ],
                         ),
-                      ),
-
-                      // Watch Icon
-                      const Icon(
-                        Icons.chevron_right_rounded,
-                        color: AppColors.textMuted,
-                      ),
-                    ],
+                        if (episode.overview?.isNotEmpty == true) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            episode.overview!,
+                            style: AppTypography.bodySmall,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
+                ],
               );
             },
           ),
-
-        // ── Load More / Pagination Chunking Button ──────────────────
-        if (hasMore)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.screenPadding,
-              vertical: AppSpacing.md,
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.border),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
-                  ),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _visibleChunk += 25;
-                  });
-                },
-                icon: const Icon(Icons.expand_more_rounded, color: AppColors.primary),
-                label: Text(
-                  'Daha Fazla Bölüm Göster (${filtered.length - _visibleChunk} Kalan)',
-                  style: AppTypography.titleSmall.copyWith(color: Colors.white),
-                ),
-              ),
-            ),
-          ),
-      ],
+        ),
+      ),
     );
   }
 }

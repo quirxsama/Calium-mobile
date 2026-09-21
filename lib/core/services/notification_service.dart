@@ -15,6 +15,8 @@ class NotificationService {
   static const String _channelEpisodesName = 'Yeni Bölüm Bildirimleri';
   static const String _channelSocialId = 'calium_social';
   static const String _channelSocialName = 'Sosyal Bildirimler';
+  static const String _channelDownloadsId = 'calium_downloads';
+  static const String _channelDownloadsName = 'İndirme Bildirimleri';
 
   Future<void> init() async {
     if (_initialized) return;
@@ -55,6 +57,18 @@ class NotificationService {
           importance: Importance.high,
           playSound: true,
           enableVibration: true,
+        ),
+      );
+
+      await androidImplementation.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _channelDownloadsId,
+          _channelDownloadsName,
+          description: 'Bölüm indirme ilerlemesi ve tamamlanma bildirimleri.',
+          importance: Importance.low,
+          playSound: false,
+          enableVibration: false,
+          showBadge: false,
         ),
       );
     }
@@ -132,6 +146,115 @@ class NotificationService {
       );
     } catch (e) {
       debugPrint('⚠️ Show social notification error: $e');
+    }
+  }
+
+  Future<void> showDownloadProgressNotification({
+    required int id,
+    required String animeTitle,
+    required String episodeLabel,
+    required int progressPercent,
+    required String speedText,
+  }) async {
+    try {
+      final androidDetails = AndroidNotificationDetails(
+        _channelDownloadsId,
+        _channelDownloadsName,
+        importance: Importance.low,
+        priority: Priority.low,
+        showWhen: false,
+        onlyAlertOnce: true,
+        ongoing: true,
+        autoCancel: false,
+        showProgress: true,
+        maxProgress: 100,
+        progress: progressPercent.clamp(0, 100),
+        icon: '@mipmap/ic_launcher',
+      );
+
+      final details = NotificationDetails(android: androidDetails);
+
+      await _notificationsPlugin.show(
+        id,
+        '⬇️ İndiriliyor: $animeTitle',
+        '$episodeLabel • %$progressPercent ($speedText)',
+        details,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Show download progress notification error: $e');
+    }
+  }
+
+  Future<void> showDownloadCompletedNotification({
+    required int id,
+    required String animeTitle,
+    required String episodeLabel,
+  }) async {
+    if (!_initialized) return;
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        _channelDownloadsId,
+        _channelDownloadsName,
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        showWhen: true,
+        onlyAlertOnce: false,
+        ongoing: false,
+        autoCancel: true,
+        icon: '@mipmap/ic_launcher',
+      );
+
+      const details = NotificationDetails(android: androidDetails);
+
+      await _notificationsPlugin.show(
+        id,
+        '✅ İndirme Tamamlandı',
+        '$animeTitle - $episodeLabel çevrimdışı izlemeye hazır.',
+        details,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Show download completed notification error: $e');
+    }
+  }
+
+  Future<void> showDownloadFailedNotification({
+    required int id,
+    required String animeTitle,
+    required String episodeLabel,
+  }) async {
+    if (!_initialized) return;
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        _channelDownloadsId,
+        _channelDownloadsName,
+        importance: Importance.high,
+        priority: Priority.high,
+        showWhen: true,
+        onlyAlertOnce: false,
+        ongoing: false,
+        autoCancel: true,
+        icon: '@mipmap/ic_launcher',
+      );
+
+      const details = NotificationDetails(android: androidDetails);
+
+      await _notificationsPlugin.show(
+        id,
+        '❌ İndirme Başarısız',
+        '$animeTitle - $episodeLabel indirilemedi. Ayrıntılar ve yeniden deneme için İndirmeler ekranını açın.',
+        details,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Show download failed notification error: $e');
+    }
+  }
+
+  Future<void> cancelNotification(int id) async {
+    if (!_initialized) return;
+    try {
+      await _notificationsPlugin.cancel(id);
+    } catch (e) {
+      debugPrint('⚠️ Cancel notification error: $e');
     }
   }
 }

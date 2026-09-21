@@ -9,9 +9,7 @@ import 'package:calium_stream/features/social/domain/entities/room_entity.dart';
 import 'package:calium_stream/features/social/domain/repositories/social_repository.dart';
 
 class SocialRepositoryImpl implements SocialRepository {
-  const SocialRepositoryImpl({
-    required this._remoteDataSource,
-  });
+  const SocialRepositoryImpl({required this._remoteDataSource});
 
   final SocialRemoteDataSource _remoteDataSource;
 
@@ -143,7 +141,10 @@ class SocialRepositoryImpl implements SocialRepository {
     required bool accept,
   }) async {
     try {
-      await _remoteDataSource.respondFollowRequest(username: username, accept: accept);
+      await _remoteDataSource.respondFollowRequest(
+        username: username,
+        accept: accept,
+      );
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(message: e.toString()));
@@ -151,7 +152,8 @@ class SocialRepositoryImpl implements SocialRepository {
   }
 
   @override
-  Future<Either<Failure, List<AppNotificationEntity>>> getNotifications() async {
+  Future<Either<Failure, List<AppNotificationEntity>>>
+  getNotifications() async {
     try {
       final notifications = await _remoteDataSource.getNotifications();
       return Right(notifications);
@@ -164,6 +166,16 @@ class SocialRepositoryImpl implements SocialRepository {
   Future<Either<Failure, void>> markNotificationsRead() async {
     try {
       await _remoteDataSource.markNotificationsRead();
+      return const Right(null);
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> clearAllNotifications() async {
+    try {
+      await _remoteDataSource.clearAllNotifications();
       return const Right(null);
     } catch (e) {
       return Left(ServerFailure(message: e.toString()));

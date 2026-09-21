@@ -1,6 +1,8 @@
 import 'dart:io';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:calium_stream/core/error/failures.dart';
 
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
 import 'package:calium_stream/features/player/domain/entities/intro_song_entity.dart';
@@ -53,7 +55,9 @@ final class PlayerReady extends PlayerState {
       sourceData: sourceData ?? this.sourceData,
       selectedAudioGroup: selectedAudioGroup ?? this.selectedAudioGroup,
       selectedStream: selectedStream ?? this.selectedStream,
-      selectedSubtitle: clearSubtitle ? null : (selectedSubtitle ?? this.selectedSubtitle),
+      selectedSubtitle: clearSubtitle
+          ? null
+          : (selectedSubtitle ?? this.selectedSubtitle),
       introSong: clearIntroSong ? null : (introSong ?? this.introSong),
       playbackSpeed: playbackSpeed ?? this.playbackSpeed,
       isFitCover: isFitCover ?? this.isFitCover,
@@ -62,23 +66,24 @@ final class PlayerReady extends PlayerState {
 
   @override
   List<Object?> get props => [
-        sourceData,
-        selectedAudioGroup,
-        selectedStream,
-        selectedSubtitle,
-        introSong,
-        playbackSpeed,
-        isFitCover,
-      ];
+    sourceData,
+    selectedAudioGroup,
+    selectedStream,
+    selectedSubtitle,
+    introSong,
+    playbackSpeed,
+    isFitCover,
+  ];
 }
 
 final class PlayerError extends PlayerState {
-  const PlayerError({required this.message});
+  const PlayerError({required this.message, this.isNetwork = false});
 
   final String message;
+  final bool isNetwork;
 
   @override
-  List<Object?> get props => [message];
+  List<Object?> get props => [message, isNetwork];
 }
 
 class PlayerCubit extends Cubit<PlayerState> {
@@ -89,6 +94,16 @@ class PlayerCubit extends Cubit<PlayerState> {
 
   final GetVideoSourcesUseCase _getVideoSourcesUseCase;
   final GetIntroSongUseCase _getIntroSongUseCase;
+  int _sourceRequest = 0;
+
+  bool _isPlayableFile(String path) {
+    try {
+      final file = File(path);
+      return file.existsSync() && file.lengthSync() >= 100 * 1024;
+    } on FileSystemException {
+      return false;
+    }
+  }
 
   Future<void> loadVideoSources({
     required String animeId,
@@ -96,129 +111,224 @@ class PlayerCubit extends Cubit<PlayerState> {
     required int episode,
     String? localFilePath,
   }) async {
+    if (isClosed) return;
+    final request = ++_sourceRequest;
     emit(PlayerLoading());
 
     // 1. Check if localFilePath passed or completed task exists in DownloadService
     String? targetPath = localFilePath;
+    final uri = Uri.tryParse(targetPath ?? '');
+    if (uri?.scheme == 'file') {
+      try {
+        targetPath = uri!.toFilePath();
+      } on UnsupportedError {
+        emit(
+          const PlayerError(
+            message: 'Yerel dosya yolu geçersiz. İndirmelerden yeniden açın.',
+          ),
+        );
+        return;
+      }
+    } else if (uri?.scheme == 'http' || uri?.scheme == 'https') {
+      targetPath = null;
+    }
+    DownloadTaskEntity? matchedTask;
+    final tasks = DownloadService.instance.currentTasks;
+
     if (targetPath == null || targetPath.isEmpty) {
       final taskId = '${animeId}_s${season}_ep$episode';
-      final tasks = DownloadService.instance.currentTasks;
       for (final t in tasks) {
-        final matches = (t.id == taskId || (t.animeId == animeId && t.seasonNumber == season && t.episodeNumber == episode));
-        if (matches && t.status == DownloadStatus.completed && t.savePath.isNotEmpty) {
-          final file = File(t.savePath);
-          if (file.existsSync() && file.lengthSync() > 100 * 1024) {
+        final matches =
+            (t.id == taskId ||
+            (t.animeId == animeId &&
+                t.seasonNumber == season &&
+                t.episodeNumber == episode));
+        if (matches &&
+            t.status == DownloadStatus.completed &&
+            t.savePath.isNotEmpty) {
+          if (_isPlayableFile(t.savePath)) {
             targetPath = t.savePath;
+            matchedTask = t;
             break;
-          } else {
-            // Bad or 0-byte file from earlier, cleanup corrupt file and task
-            try {
-              if (file.existsSync()) file.deleteSync();
-            } catch (_) {}
-            DownloadService.instance.removeTask(t.id);
           }
+        }
+      }
+    } else {
+      for (final t in tasks) {
+        if (t.savePath == targetPath && t.status == DownloadStatus.completed) {
+          matchedTask = t;
+          break;
         }
       }
     }
 
     if (targetPath != null && targetPath.isNotEmpty) {
-      final file = File(targetPath);
-      if (file.existsSync() && file.lengthSync() > 100 * 1024) {
+      if (_isPlayableFile(targetPath)) {
         final localStream = VideoStreamItemEntity(
-          quality: 'Çevrimdışı (Yerel İndirme)',
+          quality: matchedTask?.quality ?? 'Çevrimdışı (Yerel İndirme)',
           url: targetPath,
           type: 'file',
         );
         final localAudio = AudioGroupEntity(
-          name: 'Yerel İndirme',
+          name: matchedTask?.audioName ?? 'Yerel İndirme',
           group: 'local',
           streams: [localStream],
         );
+
+        // Find offline subtitles from task metadata
+        List<SubtitleTrackEntity> localSubtitles = [];
+        if (matchedTask != null && matchedTask.localSubtitles.isNotEmpty) {
+          for (final sub in matchedTask.localSubtitles) {
+            final sPath = sub['path'] ?? '';
+            if (sPath.isNotEmpty && File(sPath).existsSync()) {
+              localSubtitles.add(
+                SubtitleTrackEntity(
+                  name: sub['name'] ?? 'Türkçe',
+                  group: sub['group'] ?? 'tr',
+                  url: sPath,
+                ),
+              );
+            }
+          }
+        }
+
+        // Determine if next episode is downloaded offline
+        int? nextDownloadedEpisode;
+        int? nextDownloadedSeason;
+        final nextCandidate = tasks
+            .where(
+              (t) =>
+                  t.animeId == animeId &&
+                  t.seasonNumber == season &&
+                  t.episodeNumber == episode + 1 &&
+                  t.status == DownloadStatus.completed &&
+                  _isPlayableFile(t.savePath),
+            )
+            .toList();
+        if (nextCandidate.isNotEmpty) {
+          nextDownloadedEpisode = episode + 1;
+          nextDownloadedSeason = season;
+        }
+
         final syntheticSource = EpisodeSourceEntity(
           audioGroups: [localAudio],
-          subtitles: const [],
+          subtitles: localSubtitles,
+          nextEpisode: nextDownloadedEpisode,
+          nextSeason: nextDownloadedSeason,
         );
+
+        SubtitleTrackEntity? initialSubtitle;
+        if (localSubtitles.isNotEmpty) {
+          initialSubtitle = localSubtitles.firstWhere(
+            (s) => s.group == 'tr' || s.name.contains('Türkçe'),
+            orElse: () => localSubtitles.first,
+          );
+        }
 
         emit(
           PlayerReady(
             sourceData: syntheticSource,
             selectedAudioGroup: localAudio,
             selectedStream: localStream,
+            selectedSubtitle: initialSubtitle,
           ),
         );
         return;
       } else {
-        try {
-          if (file.existsSync()) file.deleteSync();
-        } catch (_) {}
+        emit(
+          const PlayerError(
+            message: 'İndirilen video bulunamadı veya eksik. İndirmeler ekranından yeniden indirin.',
+          ),
+        );
+        return;
       }
     }
 
-    final result = await _getVideoSourcesUseCase(
-      GetVideoSourcesParams(
-        animeId: animeId,
-        season: season,
-        episode: episode,
-      ),
-    );
+    try {
+      final result = await _getVideoSourcesUseCase(
+        GetVideoSourcesParams(
+          animeId: animeId,
+          season: season,
+          episode: episode,
+        ),
+      );
+      if (isClosed || request != _sourceRequest) return;
 
-    result.fold(
-      (failure) {
-        final msg = failure.message;
-        final isOffline = msg.contains('SocketException') ||
-            msg.contains('Failed host lookup') ||
-            msg.contains('anizium') ||
-            msg.contains('HandshakeException');
-        if (isOffline) {
-          emit(const PlayerError(
-            message: 'İnternet bağlantısı kurulamadı. Bu bölümü çevrimdışı izlemek için önceden indirmiş olmanız gerekir.',
-          ));
-        } else {
-          emit(PlayerError(message: failure.message));
-        }
-      },
-      (data) {
-        if (data.audioGroups.isEmpty) {
-          emit(const PlayerError(message: 'Bu bölüm için video kaynağı bulunamadı.'));
-          return;
-        }
+      result.fold(
+        (failure) {
+          if (failure is NetworkFailure) {
+            emit(
+              const PlayerError(
+                isNetwork: true,
+                message: 'İnternet bağlantısı kurulamadı. Bu bölümü çevrimdışı izlemek için önceden indirmiş olmanız gerekir.',
+              ),
+            );
+          } else {
+            emit(PlayerError(message: failure.message));
+          }
+        },
+        (data) {
+          final availableGroups = data.audioGroups
+              .where((g) => g.streams.isNotEmpty)
+              .toList();
+          if (availableGroups.isEmpty) {
+            emit(
+              const PlayerError(
+                message: 'Bu bölüm için video kaynağı bulunamadı.',
+              ),
+            );
+            return;
+          }
 
-        // Prefer original (Japanese) or first available
-        final initialAudio = data.audioGroups.firstWhere(
-          (g) => g.group == 'original' || g.name.contains('Japonca'),
-          orElse: () => data.audioGroups.first,
-        );
-
-        if (initialAudio.streams.isEmpty) {
-          emit(const PlayerError(message: 'Bu ses grubunda video akışı bulunamadı.'));
-          return;
-        }
-
-        // Prefer 1080p or highest available stream
-        final initialStream = initialAudio.streams.firstWhere(
-          (s) => s.quality == '1080p',
-          orElse: () => initialAudio.streams.first,
-        );
-
-        // Default to Turkish subtitle if available
-        SubtitleTrackEntity? initialSubtitle;
-        if (data.subtitles.isNotEmpty) {
-          initialSubtitle = data.subtitles.firstWhere(
-            (s) => s.group == 'tr' || s.name.contains('Türkçe'),
-            orElse: () => data.subtitles.first,
+          // Prefer original (Japanese) or first available
+          final initialAudio = availableGroups.firstWhere(
+            (g) => g.group == 'original' || g.name.contains('Japonca'),
+            orElse: () => availableGroups.first,
           );
-        }
 
+          if (initialAudio.streams.isEmpty) {
+            emit(
+              const PlayerError(
+                message: 'Bu ses grubunda video akışı bulunamadı.',
+              ),
+            );
+            return;
+          }
+
+          // Prefer 1080p or highest available stream
+          final initialStream = initialAudio.streams.firstWhere(
+            (s) => s.quality == '1080p',
+            orElse: () => initialAudio.streams.first,
+          );
+
+          // Default to Turkish subtitle if available
+          SubtitleTrackEntity? initialSubtitle;
+          if (data.subtitles.isNotEmpty) {
+            initialSubtitle = data.subtitles.firstWhere(
+              (s) => s.group == 'tr' || s.name.contains('Türkçe'),
+              orElse: () => data.subtitles.first,
+            );
+          }
+
+          emit(
+            PlayerReady(
+              sourceData: data,
+              selectedAudioGroup: initialAudio,
+              selectedStream: initialStream,
+              selectedSubtitle: initialSubtitle,
+            ),
+          );
+        },
+      );
+    } catch (_) {
+      if (!isClosed && request == _sourceRequest) {
         emit(
-          PlayerReady(
-            sourceData: data,
-            selectedAudioGroup: initialAudio,
-            selectedStream: initialStream,
-            selectedSubtitle: initialSubtitle,
+          const PlayerError(
+            message: 'Video kaynakları alınamadı. Yeniden deneyin.',
           ),
         );
-      },
-    );
+      }
+    }
   }
 
   Future<void> loadIntroSong({
@@ -230,27 +340,35 @@ class PlayerCubit extends Cubit<PlayerState> {
     int? introStart,
     String? streamUrl,
   }) async {
-    final result = await _getIntroSongUseCase(
-      GetIntroSongParams(
-        animeId: animeId,
-        episodeId: episodeId,
-        animeName: animeName,
-        season: season,
-        episode: episode,
-        introStart: introStart,
-        streamUrl: streamUrl,
-      ),
-    );
+    if (isClosed ||
+        state is! PlayerReady ||
+        (state as PlayerReady).selectedStream.type == 'file') {
+      return;
+    }
+    final sourceRequest = _sourceRequest;
+    try {
+      final result = await _getIntroSongUseCase(
+        GetIntroSongParams(
+          animeId: animeId,
+          episodeId: episodeId,
+          animeName: animeName,
+          season: season,
+          episode: episode,
+          introStart: introStart,
+          streamUrl: streamUrl,
+        ),
+      );
+      if (isClosed || sourceRequest != _sourceRequest) return;
 
-    result.fold(
-      (_) => null,
-      (song) {
+      result.fold((_) => null, (song) {
         if (state is PlayerReady && song != null) {
           final curr = state as PlayerReady;
           emit(curr.copyWith(introSong: song));
         }
-      },
-    );
+      });
+    } catch (_) {
+      // Optional metadata must not interrupt video playback.
+    }
   }
 
   void selectAudioGroup(AudioGroupEntity audioGroup) {
@@ -265,10 +383,12 @@ class PlayerCubit extends Cubit<PlayerState> {
       orElse: () => audioGroup.streams.first,
     );
 
-    emit(curr.copyWith(
-      selectedAudioGroup: audioGroup,
-      selectedStream: matchedStream,
-    ));
+    emit(
+      curr.copyWith(
+        selectedAudioGroup: audioGroup,
+        selectedStream: matchedStream,
+      ),
+    );
   }
 
   void selectQuality(VideoStreamItemEntity stream) {

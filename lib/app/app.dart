@@ -27,27 +27,18 @@ class CaliumApp extends StatelessWidget {
         BlocProvider<HomeBloc>(
           create: (_) => GetIt.I<HomeBloc>()..add(LoadHomeFeedRequested()),
         ),
-        BlocProvider<ExploreBloc>(
-          create: (_) => GetIt.I<ExploreBloc>(),
-        ),
-        BlocProvider<SocialBloc>(
-          create: (_) => GetIt.I<SocialBloc>(),
-        ),
-        BlocProvider<SearchBloc>(
-          create: (_) => GetIt.I<SearchBloc>(),
-        ),
+        BlocProvider<ExploreBloc>(create: (_) => GetIt.I<ExploreBloc>()),
+        BlocProvider<SocialBloc>(create: (_) => GetIt.I<SocialBloc>()),
+        BlocProvider<SearchBloc>(create: (_) => GetIt.I<SearchBloc>()),
         BlocProvider<LibraryBloc>(
-          create: (_) => GetIt.I<LibraryBloc>(),
+          create: (_) => GetIt.I<LibraryBloc>()..add(LoadLibraryRequested()),
         ),
-        BlocProvider<CalendarBloc>(
-          create: (_) => GetIt.I<CalendarBloc>(),
-        ),
+        BlocProvider<CalendarBloc>(create: (_) => GetIt.I<CalendarBloc>()),
         BlocProvider<UserListsBloc>(
-          create: (_) => GetIt.I<UserListsBloc>(),
+          create: (_) =>
+              GetIt.I<UserListsBloc>()..add(LoadUserListsRequested()),
         ),
-        BlocProvider<SettingsBloc>(
-          create: (_) => GetIt.I<SettingsBloc>(),
-        ),
+        BlocProvider<SettingsBloc>(create: (_) => GetIt.I<SettingsBloc>()),
       ],
       child: MaterialApp.router(
         title: 'Calium',

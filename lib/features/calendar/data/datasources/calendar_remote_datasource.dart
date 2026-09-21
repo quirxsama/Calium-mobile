@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:calium_stream/core/constants/api_constants.dart';
 import 'package:calium_stream/core/error/exceptions.dart';
 import 'package:calium_stream/core/network/dio_client.dart';
@@ -36,7 +35,14 @@ class CalendarRemoteDataSourceImpl implements CalendarRemoteDataSource {
   @override
   Future<List<CalendarDayModel>> getCalendar() async {
     try {
-      // 1. Try direct Anizium API FIRST (most reliable, matches web)
+      // 1. Try Calium proxy FIRST (Cloudflare bypass & reliable)
+      try {
+        final response = await _dioClient.get('/api/anizium/calendar');
+        final parsed = _parseCalendar(response.data);
+        if (parsed.isNotEmpty) return parsed;
+      } catch (_) {}
+
+      // 2. Direct Anizium API fallback
       try {
         final directDio = Dio(
           BaseOptions(
@@ -52,16 +58,6 @@ class CalendarRemoteDataSourceImpl implements CalendarRemoteDataSource {
           ),
         );
         final response = await directDio.get('${ApiConstants.aniziumApiBaseUrl}/page/calendar');
-        debugPrint('📅 Calendar API response type: ${response.data.runtimeType}');
-        final parsed = _parseCalendar(response.data);
-        if (parsed.isNotEmpty) return parsed;
-      } catch (e) {
-        debugPrint('📅 Direct Calendar API failed: $e');
-      }
-
-      // 2. Try Calium proxy
-      try {
-        final response = await _dioClient.get('/api/anizium/calendar');
         final parsed = _parseCalendar(response.data);
         if (parsed.isNotEmpty) return parsed;
       } catch (_) {}

@@ -7,7 +7,10 @@ import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/anime_poster_card.dart';
+import 'package:calium_stream/core/widgets/adaptive_poster_grid.dart';
+import 'package:calium_stream/core/widgets/app_content_frame.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
+import 'package:calium_stream/core/widgets/app_status_view.dart';
 import 'package:calium_stream/core/utils/episode_utils.dart';
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
 import 'package:calium_stream/features/auth/presentation/bloc/auth_bloc.dart';
@@ -16,7 +19,8 @@ import 'package:calium_stream/features/library/domain/entities/history_entity.da
 import 'package:calium_stream/features/library/presentation/bloc/library_bloc.dart';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key});
+  const LibraryScreen({this.initialTab = 0, super.key});
+  final int initialTab;
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -29,15 +33,89 @@ class _LibraryScreenState extends State<LibraryScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(
+      length: 3,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 2),
+    );
     context.read<LibraryBloc>().add(LoadLibraryRequested());
     context.read<AuthBloc>().add(CheckAuthRequested());
+  }
+
+  @override
+  void didUpdateWidget(covariant LibraryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialTab != widget.initialTab &&
+        _tabController.index != widget.initialTab) {
+      _tabController.animateTo(widget.initialTab.clamp(0, 2));
+    }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshLibrary() async {
+    final bloc = context.read<LibraryBloc>();
+    final completed = bloc.stream.firstWhere(
+      (state) =>
+          state is LibraryFailureState ||
+          (state is LibraryLoaded && !state.isRefreshing),
+    );
+    bloc.add(LoadLibraryRequested());
+    await completed;
+  }
+
+  Widget _collectionState(
+    LibraryState state,
+    Widget content,
+    String error,
+    bool hasItems,
+  ) {
+    if (state is LibraryInitial || state is LibraryLoading) {
+      return const Center(
+        child: CircularProgressIndicator(semanticsLabel: 'Kitaplık yükleniyor'),
+      );
+    }
+    final message = state is LibraryFailureState ? state.message : error;
+    if (message.isNotEmpty && !hasItems) {
+      return AppStatusView(
+        title: 'İçerik yüklenemedi',
+        message: message,
+        icon: Icons.error_outline_rounded,
+        actions: [
+          FilledButton(
+            onPressed: _refreshLibrary,
+            child: const Text('Yeniden dene'),
+          ),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        if (state is LibraryLoaded && state.isRefreshing)
+          const LinearProgressIndicator(semanticsLabel: 'Kitaplık yenileniyor'),
+        if (message.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                Text(
+                  message,
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+                TextButton(
+                  onPressed: _refreshLibrary,
+                  child: const Text('Yeniden dene'),
+                ),
+              ],
+            ),
+          ),
+        Expanded(child: content),
+      ],
+    );
   }
 
   @override
@@ -48,7 +126,9 @@ class _LibraryScreenState extends State<LibraryScreen>
         backgroundColor: AppColors.background,
         elevation: 0,
         title: Text(
-          'Kitaplık & Profil',
+          'Kitaplık',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: AppTypography.headlineMedium.copyWith(
             fontWeight: FontWeight.w900,
           ),
@@ -64,10 +144,15 @@ class _LibraryScreenState extends State<LibraryScreen>
             initialData: DownloadService.instance.currentTasks,
             builder: (context, snapshot) {
               final tasks = snapshot.data ?? [];
-              final downloadingTasks = tasks.where((t) => t.status == DownloadStatus.downloading).toList();
+              final downloadingTasks = tasks
+                  .where((t) => t.status == DownloadStatus.downloading)
+                  .toList();
               final isDownloading = downloadingTasks.isNotEmpty;
-              final totalProgress = isDownloading 
-                  ? downloadingTasks.map((t) => t.progress).reduce((a, b) => a + b) / downloadingTasks.length 
+              final totalProgress = isDownloading
+                  ? downloadingTasks
+                            .map((t) => t.progress)
+                            .reduce((a, b) => a + b) /
+                        downloadingTasks.length
                   : 0.0;
 
               return IconButton(
@@ -86,8 +171,10 @@ class _LibraryScreenState extends State<LibraryScreen>
                         ),
                       ),
                     Icon(
-                      Icons.download_for_offline_rounded, 
-                      color: isDownloading ? AppColors.primary : AppColors.textSecondary,
+                      Icons.download_for_offline_rounded,
+                      color: isDownloading
+                          ? AppColors.primary
+                          : AppColors.textSecondary,
                     ),
                   ],
                 ),
@@ -97,12 +184,17 @@ class _LibraryScreenState extends State<LibraryScreen>
           ),
           IconButton(
             tooltip: 'Ayarlar',
-            icon: const Icon(Icons.settings_rounded, color: AppColors.textSecondary),
+            icon: const Icon(
+              Icons.settings_rounded,
+              color: AppColors.textSecondary,
+            ),
             onPressed: () => context.push('/settings'),
           ),
         ],
 
         bottom: TabBar(
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           controller: _tabController,
           indicatorColor: AppColors.primary,
           indicatorWeight: 3,
@@ -118,20 +210,59 @@ class _LibraryScreenState extends State<LibraryScreen>
           ],
         ),
       ),
-      body: BlocBuilder<LibraryBloc, LibraryState>(
-        builder: (context, libraryState) {
-          final favorites = (libraryState is LibraryLoaded) ? libraryState.favorites : <FavoriteEntity>[];
-          final history = (libraryState is LibraryLoaded) ? libraryState.history : <HistoryEntity>[];
+      body: SafeArea(
+        top: false,
+        child: BlocConsumer<LibraryBloc, LibraryState>(
+          listenWhen: (previous, current) =>
+              current is LibraryLoaded &&
+              current.errorMessage.isNotEmpty &&
+              (previous is! LibraryLoaded ||
+                  previous.errorMessage != current.errorMessage),
+          listener: (context, state) {
+            if (state is LibraryLoaded) {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(state.errorMessage)));
+            }
+          },
+          builder: (context, libraryState) {
+            final favorites = (libraryState is LibraryLoaded)
+                ? libraryState.favorites
+                : <FavoriteEntity>[];
+            final history = (libraryState is LibraryLoaded)
+                ? libraryState.history
+                : <HistoryEntity>[];
 
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _buildProfileTab(context, favorites.length, history.length),
-              _buildFavoritesTab(favorites),
-              _buildHistoryTab(history),
-            ],
-          );
-        },
+            return TabBarView(
+              controller: _tabController,
+              children: [
+                AppContentFrame(
+                  maxWidth: 760,
+                  child: _buildProfileTab(
+                    context,
+                    favorites.length,
+                    history.length,
+                  ),
+                ),
+                _collectionState(
+                  libraryState,
+                  _buildFavoritesTab(favorites),
+                  libraryState is LibraryLoaded
+                      ? libraryState.favoritesError
+                      : '',
+                  favorites.isNotEmpty,
+                ),
+                _collectionState(
+                  libraryState,
+                  _buildHistoryTab(history),
+                  libraryState is LibraryLoaded
+                      ? libraryState.historyError
+                      : '',
+                  history.isNotEmpty,
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -146,9 +277,10 @@ class _LibraryScreenState extends State<LibraryScreen>
           return RefreshIndicator(
             onRefresh: () async {
               context.read<AuthBloc>().add(CheckAuthRequested());
-              context.read<LibraryBloc>().add(LoadLibraryRequested());
+              await _refreshLibrary();
             },
             child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(AppSpacing.screenPadding),
               children: [
                 // Profile Card
@@ -156,7 +288,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                   padding: const EdgeInsets.all(AppSpacing.lg),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceDark,
-                    borderRadius: BorderRadius.circular(AppSpacing.borderRadiusLg),
+                    borderRadius: BorderRadius.circular(
+                      AppSpacing.borderRadiusLg,
+                    ),
                     border: Border.all(color: AppColors.border, width: 0.5),
                   ),
                   child: Column(
@@ -166,14 +300,18 @@ class _LibraryScreenState extends State<LibraryScreen>
                         radius: 40,
                         backgroundColor: AppColors.surfaceElevated,
                         child: ClipOval(
-                          child: (user.avatarUrl != null && user.avatarUrl!.isNotEmpty)
+                          child:
+                              (user.avatarUrl != null &&
+                                  user.avatarUrl!.isNotEmpty)
                               ? AppCachedImage(
                                   imageUrl: user.avatarUrl,
                                   fit: BoxFit.cover,
                                   width: 80,
                                   height: 80,
                                   errorWidget: Text(
-                                    user.username.isNotEmpty ? user.username[0].toUpperCase() : 'U',
+                                    user.username.isNotEmpty
+                                        ? user.username[0].toUpperCase()
+                                        : 'U',
                                     style: const TextStyle(
                                       fontSize: 32,
                                       fontWeight: FontWeight.bold,
@@ -182,7 +320,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                                   ),
                                 )
                               : Text(
-                                  user.username.isNotEmpty ? user.username[0].toUpperCase() : 'U',
+                                  user.username.isNotEmpty
+                                      ? user.username[0].toUpperCase()
+                                      : 'U',
                                   style: const TextStyle(
                                     fontSize: 32,
                                     fontWeight: FontWeight.bold,
@@ -196,24 +336,32 @@ class _LibraryScreenState extends State<LibraryScreen>
                       // Display Name & Username
                       Text(
                         user.displayName ?? user.username,
-                        style: AppTypography.headlineMedium.copyWith(fontSize: 20),
+                        style: AppTypography.headlineMedium.copyWith(
+                          fontSize: 20,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         '@${user.username}',
-                        style: AppTypography.bodySmall.copyWith(color: AppColors.primary),
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.primary,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         user.email,
-                        style: AppTypography.caption.copyWith(color: AppColors.textMuted),
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textMuted,
+                        ),
                       ),
 
                       if (user.bio != null && user.bio!.isNotEmpty) ...[
                         const SizedBox(height: 10),
                         Text(
                           user.bio!,
-                          style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+                          style: AppTypography.bodySmall.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ],
@@ -222,18 +370,23 @@ class _LibraryScreenState extends State<LibraryScreen>
 
                       // Stats Row
                       Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 16,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.surfaceElevated,
-                          borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+                          borderRadius: BorderRadius.circular(
+                            AppSpacing.borderRadiusMd,
+                          ),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        child: Wrap(
+                          alignment: WrapAlignment.spaceAround,
+                          spacing: 16,
+                          runSpacing: 12,
                           children: [
                             _buildStatItem('Favoriler', favCount.toString()),
-                            Container(width: 1, height: 28, color: AppColors.border),
                             _buildStatItem('İzlenenler', histCount.toString()),
-                            Container(width: 1, height: 28, color: AppColors.border),
                             _buildStatItem('Rol', user.role.toUpperCase()),
                           ],
                         ),
@@ -248,15 +401,26 @@ class _LibraryScreenState extends State<LibraryScreen>
                 Container(
                   decoration: BoxDecoration(
                     color: AppColors.surfaceDark,
-                    borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+                    borderRadius: BorderRadius.circular(
+                      AppSpacing.borderRadiusMd,
+                    ),
                     border: Border.all(color: AppColors.border, width: 0.5),
                   ),
                   child: Column(
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.cloud_done_rounded, color: AppColors.successGreen),
-                        title: const Text('Bulut Veritabanı', style: TextStyle(color: Colors.white)),
-                        subtitle: const Text('calium.fun ile bağlı', style: TextStyle(color: AppColors.textMuted)),
+                        leading: const Icon(
+                          Icons.cloud_done_rounded,
+                          color: AppColors.successGreen,
+                        ),
+                        title: const Text(
+                          'Hesap eşitlemesi',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        subtitle: const Text(
+                          'Favoriler ve izleme geçmişi',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
                         trailing: TextButton(
                           onPressed: () {
                             context.read<LibraryBloc>().add(SyncRequested());
@@ -266,8 +430,14 @@ class _LibraryScreenState extends State<LibraryScreen>
                       ),
                       const Divider(height: 1, color: AppColors.border),
                       ListTile(
-                        leading: const Icon(Icons.history_toggle_off_rounded, color: AppColors.ratingAmber),
-                        title: const Text('İzleme Geçmişini Sıfırla', style: TextStyle(color: Colors.white)),
+                        leading: const Icon(
+                          Icons.history_toggle_off_rounded,
+                          color: AppColors.ratingAmber,
+                        ),
+                        title: const Text(
+                          'İzleme Geçmişini Sıfırla',
+                          style: TextStyle(color: Colors.white),
+                        ),
                         onTap: () => _confirmClearHistory(context),
                       ),
                     ],
@@ -283,15 +453,23 @@ class _LibraryScreenState extends State<LibraryScreen>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.surfaceElevated,
                       foregroundColor: AppColors.accentCrimson,
-                      side: const BorderSide(color: AppColors.accentCrimson, width: 0.5),
+                      side: const BorderSide(
+                        color: AppColors.accentCrimson,
+                        width: 0.5,
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+                        borderRadius: BorderRadius.circular(
+                          AppSpacing.borderRadiusMd,
+                        ),
                       ),
                     ),
                     onPressed: () => _confirmLogout(context),
                     icon: const Icon(Icons.logout_rounded, size: 20),
-                    label: const Text('Çıkış Yap', style: TextStyle(fontWeight: FontWeight.w700)),
+                    label: const Text(
+                      'Çıkış Yap',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ],
@@ -308,51 +486,60 @@ class _LibraryScreenState extends State<LibraryScreen>
 
         // Unauthenticated State
         return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.screenPadding),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withAlpha(20),
-                    shape: BoxShape.circle,
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.screenPadding),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withAlpha(20),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.account_circle_outlined,
+                      size: 64,
+                      color: AppColors.primary,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.account_circle_outlined,
-                    size: 64,
-                    color: AppColors.primary,
+                  const SizedBox(height: 16),
+                  Text(
+                    'Hesabına Giriş Yap',
+                    style: AppTypography.headlineMedium,
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Hesabına Giriş Yap',
-                  style: AppTypography.headlineMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'İzleme geçmişini, favorilerini ve arkadaşlarını tüm cihazlarında senkronize tutmak için calium.fun hesabınla giriş yap.',
-                  style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+                  const SizedBox(height: 8),
+                  Text(
+                    'İzleme geçmişini, favorilerini ve arkadaşlarını tüm cihazlarında senkronize tutmak için calium.fun hesabınla giriş yap.',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(
+                            AppSpacing.borderRadiusMd,
+                          ),
+                        ),
+                      ),
+                      onPressed: () => context.push('/login'),
+                      icon: const Icon(Icons.login_rounded),
+                      label: const Text(
+                        'Giriş Yap / Kayıt Ol',
+                        style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
-                    onPressed: () => context.push('/login'),
-                    icon: const Icon(Icons.login_rounded),
-                    label: const Text('Giriş Yap / Kayıt Ol', style: TextStyle(fontWeight: FontWeight.w700)),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -384,7 +571,10 @@ class _LibraryScreenState extends State<LibraryScreen>
       context: context,
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surfaceDark,
-        title: const Text('Çıkış Yapılsın mı?', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Çıkış Yapılsın mı?',
+          style: TextStyle(color: Colors.white),
+        ),
         content: const Text(
           'Oturumunuz kapatılacak. İstediğiniz zaman tekrar giriş yapabilirsiniz.',
           style: TextStyle(color: AppColors.textSecondary),
@@ -395,7 +585,9 @@ class _LibraryScreenState extends State<LibraryScreen>
             child: const Text('İptal'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCrimson),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentCrimson,
+            ),
             onPressed: () {
               Navigator.pop(dialogCtx);
               context.read<AuthBloc>().add(LogoutRequested());
@@ -412,7 +604,10 @@ class _LibraryScreenState extends State<LibraryScreen>
       context: context,
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: AppColors.surfaceDark,
-        title: const Text('Geçmiş Temizlensin mi?', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Geçmiş Temizlensin mi?',
+          style: TextStyle(color: Colors.white),
+        ),
         content: const Text(
           'Tüm izleme geçmişiniz silinecektir.',
           style: TextStyle(color: AppColors.textSecondary),
@@ -423,7 +618,9 @@ class _LibraryScreenState extends State<LibraryScreen>
             child: const Text('İptal'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentCrimson),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentCrimson,
+            ),
             onPressed: () {
               Navigator.pop(dialogCtx);
               context.read<LibraryBloc>().add(ClearHistoryRequested());
@@ -439,45 +636,25 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   Widget _buildFavoritesTab(List<FavoriteEntity> favorites) {
     if (favorites.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.bookmark_border_rounded,
-              size: 56,
-              color: AppColors.textMuted,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              'Henüz favori eklemedin',
-              style: AppTypography.titleMedium,
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Beğendiğin animeleri kaydetmek için anime detayından favoriye ekle.',
-              style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+      return AppStatusView(
+        title: 'Henüz favori eklemedin',
+        message: 'Beğendiğin animeleri detay sayfasından favorilerine ekleyebilirsin.',
+        icon: Icons.bookmark_border_rounded,
+        actions: [
+          FilledButton(
+            onPressed: () => context.go('/explore'),
+            child: const Text('Anime keşfet'),
+          ),
+          TextButton(onPressed: _refreshLibrary, child: const Text('Yenile')),
+        ],
       );
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        context.read<LibraryBloc>().add(LoadLibraryRequested());
-      },
-      child: GridView.builder(
-        scrollCacheExtent: ScrollCacheExtent.pixels(600),
-        addRepaintBoundaries: true,
+      onRefresh: _refreshLibrary,
+      child: AdaptivePosterGrid(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(AppSpacing.screenPadding),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          childAspectRatio: 0.65,
-          crossAxisSpacing: AppSpacing.sm,
-          mainAxisSpacing: AppSpacing.md,
-        ),
         itemCount: favorites.length,
         itemBuilder: (context, index) {
           final fav = favorites[index];
@@ -496,35 +673,24 @@ class _LibraryScreenState extends State<LibraryScreen>
 
   Widget _buildHistoryTab(List<HistoryEntity> history) {
     if (history.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.history_rounded,
-              size: 56,
-              color: AppColors.textMuted,
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              'İzleme geçmişin boş',
-              style: AppTypography.titleMedium,
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'İzlediğin bölümler burada listelenecek.',
-              style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
-            ),
-          ],
-        ),
+      return AppStatusView(
+        title: 'İzleme geçmişin boş',
+        message: 'İzlediğin bölümler burada listelenecek.',
+        icon: Icons.history_rounded,
+        actions: [
+          FilledButton(
+            onPressed: () => context.go('/explore'),
+            child: const Text('Anime keşfet'),
+          ),
+          TextButton(onPressed: _refreshLibrary, child: const Text('Yenile')),
+        ],
       );
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        context.read<LibraryBloc>().add(LoadLibraryRequested());
-      },
+      onRefresh: _refreshLibrary,
       child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         scrollCacheExtent: ScrollCacheExtent.pixels(500),
         addRepaintBoundaries: true,
         padding: const EdgeInsets.all(AppSpacing.screenPadding),
@@ -543,14 +709,18 @@ class _LibraryScreenState extends State<LibraryScreen>
             child: Row(
               children: [
                 AppCachedImage(
-                  imageUrl: item.episodeThumb.isNotEmpty ? item.episodeThumb : item.posterUrl,
+                  imageUrl: item.episodeThumb.isNotEmpty
+                      ? item.episodeThumb
+                      : item.posterUrl,
                   fallbackUrls: [
                     if (item.episodeThumb.isNotEmpty) item.posterUrl,
                   ],
-                  width: 100,
+                  width: MediaQuery.sizeOf(context).width < 400 ? 64 : 100,
                   height: 68,
                   fit: BoxFit.cover,
-                  borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
+                  borderRadius: BorderRadius.circular(
+                    AppSpacing.borderRadiusSm,
+                  ),
                 ),
                 const SizedBox(width: AppSpacing.md),
 
@@ -604,7 +774,9 @@ class _LibraryScreenState extends State<LibraryScreen>
                         alignment: Alignment.centerRight,
                         child: TextButton.icon(
                           onPressed: () {
-                            final cleanEpId = (item.episodeId.isNotEmpty && !item.episodeId.contains('_'))
+                            final cleanEpId =
+                                (item.episodeId.isNotEmpty &&
+                                    !item.episodeId.contains('_'))
                                 ? item.episodeId
                                 : '';
                             context.push(
@@ -617,16 +789,15 @@ class _LibraryScreenState extends State<LibraryScreen>
                             color: AppColors.primary,
                           ),
                           label: Text(
-                            'Kaldığın Yerden Devam Et',
-                            style: AppTypography.caption.copyWith(
+                            'Devam et',
+                            style: AppTypography.bodySmall.copyWith(
                               color: AppColors.primary,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                           style: TextButton.styleFrom(
                             padding: EdgeInsets.zero,
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            minimumSize: const Size(48, 48),
                           ),
                         ),
                       ),
@@ -644,8 +815,8 @@ class _LibraryScreenState extends State<LibraryScreen>
                   ),
                   onPressed: () {
                     context.read<LibraryBloc>().add(
-                          RemoveHistoryItemRequested(animeId: item.animeId),
-                        );
+                      RemoveHistoryItemRequested(animeId: item.animeId),
+                    );
                   },
                 ),
               ],

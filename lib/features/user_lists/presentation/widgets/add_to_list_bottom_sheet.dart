@@ -6,7 +6,7 @@ import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/features/user_lists/presentation/bloc/user_lists_bloc.dart';
 import 'package:calium_stream/features/user_lists/presentation/widgets/create_list_dialog.dart';
 
-class AddToListBottomSheet extends StatelessWidget {
+class AddToListBottomSheet extends StatefulWidget {
   const AddToListBottomSheet({
     required this.animeId,
     required this.animeName,
@@ -19,11 +19,24 @@ class AddToListBottomSheet extends StatelessWidget {
   final String? poster;
 
   @override
+  State<AddToListBottomSheet> createState() => _AddToListBottomSheetState();
+}
+
+class _AddToListBottomSheetState extends State<AddToListBottomSheet> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<UserListsBloc>().add(LoadUserListsRequested());
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.surfaceDark,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.borderRadiusXl)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.borderRadiusXl),
+        ),
       ),
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: SafeArea(
@@ -50,20 +63,27 @@ class AddToListBottomSheet extends StatelessWidget {
                   style: AppTypography.headlineMedium.copyWith(fontSize: 18),
                 ),
                 TextButton.icon(
-                  icon: const Icon(Icons.add_rounded, color: AppColors.primary, size: 18),
-                  label: const Text('Yeni Liste', style: TextStyle(color: AppColors.primary)),
+                  icon: const Icon(
+                    Icons.add_rounded,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                  label: const Text(
+                    'Yeni Liste',
+                    style: TextStyle(color: AppColors.primary),
+                  ),
                   onPressed: () {
                     showDialog(
                       context: context,
                       builder: (ctx) => CreateListDialog(
                         onCreate: (name, desc, isPub) {
                           context.read<UserListsBloc>().add(
-                                CreateUserListRequested(
-                                  name: name,
-                                  description: desc,
-                                  isPublic: isPub,
-                                ),
-                              );
+                            CreateUserListRequested(
+                              name: name,
+                              description: desc,
+                              isPublic: isPub,
+                            ),
+                          );
                         },
                       ),
                     );
@@ -74,11 +94,13 @@ class AddToListBottomSheet extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             BlocBuilder<UserListsBloc, UserListsState>(
               builder: (context, state) {
-                if (state is UserListsLoading) {
+                if (state is UserListsLoading || state is UserListsInitial) {
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(24.0),
-                      child: CircularProgressIndicator(color: AppColors.primary),
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
                     ),
                   );
                 }
@@ -101,38 +123,60 @@ class AddToListBottomSheet extends StatelessWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: state.myLists.length,
-                    separatorBuilder: (_, _) => const Divider(color: AppColors.border, height: 1),
+                    separatorBuilder: (_, _) =>
+                        const Divider(color: AppColors.border, height: 1),
                     itemBuilder: (context, index) {
                       final list = state.myLists[index];
-                      final containsAnime = list.items.any((it) => it.animeId == animeId);
+                      final containsAnime = list.items.any(
+                        (it) => it.animeId == widget.animeId,
+                      );
 
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.playlist_add_check_rounded, color: AppColors.primary),
-                        title: Text(list.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        subtitle: Text('${list.itemCount} anime · ${list.isPublic ? 'Herkese Açık' : 'Gizli'}', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                        leading: const Icon(
+                          Icons.playlist_add_check_rounded,
+                          color: AppColors.primary,
+                        ),
+                        title: Text(
+                          list.name,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${list.itemCount} anime · ${list.isPublic ? 'Herkese Açık' : 'Gizli'}',
+                          style: const TextStyle(
+                            color: AppColors.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
                         trailing: IconButton(
                           icon: Icon(
-                            containsAnime ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
-                            color: containsAnime ? AppColors.successGreen : AppColors.textSecondary,
+                            containsAnime
+                                ? Icons.check_circle_rounded
+                                : Icons.add_circle_outline_rounded,
+                            color: containsAnime
+                                ? AppColors.successGreen
+                                : AppColors.textSecondary,
                           ),
                           onPressed: () {
                             if (containsAnime) {
                               context.read<UserListsBloc>().add(
-                                    RemoveAnimeFromListRequested(
-                                      listId: list.id,
-                                      animeId: animeId,
-                                    ),
-                                  );
+                                RemoveAnimeFromListRequested(
+                                  listId: list.id,
+                                  animeId: widget.animeId,
+                                ),
+                              );
                             } else {
                               context.read<UserListsBloc>().add(
-                                    AddAnimeToListRequested(
-                                      listId: list.id,
-                                      animeId: animeId,
-                                      animeName: animeName,
-                                      poster: poster,
-                                    ),
-                                  );
+                                AddAnimeToListRequested(
+                                  listId: list.id,
+                                  animeId: widget.animeId,
+                                  animeName: widget.animeName,
+                                  poster: widget.poster,
+                                ),
+                              );
                             }
                           },
                         ),

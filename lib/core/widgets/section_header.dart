@@ -8,11 +8,7 @@ import 'package:calium_stream/core/theme/app_typography.dart';
 /// Used at the top of horizontal list sections on the Home, Discover, and
 /// similar screens.
 class SectionHeader extends StatelessWidget {
-  const SectionHeader({
-    required this.title,
-    this.onSeeAll,
-    super.key,
-  });
+  const SectionHeader({required this.title, this.onSeeAll, super.key});
 
   /// Section title displayed on the left.
   final String title;
@@ -25,27 +21,24 @@ class SectionHeader extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Flexible(
-          child: Text(
-            title,
-            style: AppTypography.headlineMedium,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+        Expanded(
+          child: Semantics(
+            header: true,
+            child: Text(
+              title,
+              style: AppTypography.headlineMedium,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
         if (onSeeAll != null)
-          GestureDetector(
-            onTap: onSeeAll,
-            behavior: HitTestBehavior.opaque,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                'Tümünü Gör',
-                style: AppTypography.bodySmall.copyWith(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          IconButton(
+            tooltip: '$title — tümünü gör',
+            onPressed: onSeeAll,
+            icon: const Icon(
+              Icons.arrow_forward_rounded,
+              color: AppColors.primary,
             ),
           ),
       ],

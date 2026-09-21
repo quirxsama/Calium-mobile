@@ -1,4 +1,3 @@
-import 'package:calium_stream/core/constants/api_constants.dart';
 import 'package:calium_stream/core/network/dio_client.dart';
 import 'package:calium_stream/features/home/data/models/anime_model.dart';
 
@@ -54,36 +53,36 @@ class HomeRemoteDataSourceImpl implements HomeRemoteDataSource {
 
   @override
   Future<List<AnimeModel>> getLatestEpisodes({int page = 1}) async {
-    return _safeFetch('${ApiConstants.aniziumApiBaseUrl}/page/last-added-episodes', params: {'page': page});
+    return _safeFetch('/api/anizium/latest', params: {'page': page});
   }
 
   @override
   Future<List<AnimeModel>> getTopAnime({int page = 1}) async {
-    return _safeFetch('${ApiConstants.aniziumApiBaseUrl}/page/top', params: {'platform': 'favorite', 'page': page});
+    return _safeFetch('/api/anizium/top', params: {'page': page});
   }
 
   @override
   Future<List<AnimeModel>> getSeasonalAnime({int page = 1}) async {
-    return _safeFetch('${ApiConstants.aniziumApiBaseUrl}/page/catalog', params: {'id': 'series', 'type': 'type', 'page': page});
+    return _safeFetch('/api/anizium/catalog', params: {'kind': 'series', 'page': page});
   }
 
   @override
   Future<List<AnimeModel>> getTrDubAnime({int page = 1}) async {
-    return _safeFetch('${ApiConstants.aniziumApiBaseUrl}/page/catalog', params: {'id': 'trdub', 'type': 'sound_group', 'page': page});
+    return _safeFetch('/api/anizium/catalog', params: {'kind': 'trdub', 'page': page});
   }
 
   @override
   Future<List<AnimeModel>> getActionAnime({int page = 1}) async {
-    return _safeFetch('${ApiConstants.aniziumApiBaseUrl}/page/catalog', params: {'id': '62263', 'type': 'genre', 'page': page});
+    return _safeFetch('/api/anizium/catalog', params: {'kind': 'genre', 'id': '62263', 'page': page});
   }
 
   @override
   Future<List<AnimeModel>> getIsekaiAnime({int page = 1}) async {
-    return _safeFetch('${ApiConstants.aniziumApiBaseUrl}/page/catalog', params: {'id': '23813', 'type': 'genre', 'page': page});
+    return _safeFetch('/api/anizium/catalog', params: {'kind': 'genre', 'id': '23813', 'page': page});
   }
 
   @override
   Future<List<AnimeModel>> getMovieAnime({int page = 1}) async {
-    return _safeFetch('${ApiConstants.aniziumApiBaseUrl}/page/catalog', params: {'id': 'movie', 'type': 'type', 'page': page});
+    return _safeFetch('/api/anizium/catalog', params: {'kind': 'movie', 'page': page});
   }
 }

@@ -1,5 +1,3 @@
-import 'package:calium_stream/core/constants/api_constants.dart';
-import 'package:calium_stream/core/error/exceptions.dart';
 import 'package:calium_stream/core/network/dio_client.dart';
 import 'package:calium_stream/features/home/data/models/anime_model.dart';
 
@@ -46,43 +44,19 @@ class ExploreRemoteDataSourceImpl implements ExploreRemoteDataSource {
     int page = 1,
   }) async {
     try {
-      final Map<String, dynamic> query = {'page': page};
-
-      switch (kind) {
-        case 'series':
-          query['id'] = 'series';
-          query['type'] = 'type';
-          break;
-        case 'movie':
-          query['id'] = 'movie';
-          query['type'] = 'type';
-          break;
-        case 'trdub':
-          query['id'] = 'trdub';
-          query['type'] = 'sound_group';
-          break;
-        case 'genre':
-          query['id'] = genreId ?? '62263';
-          query['type'] = 'genre';
-          break;
-        default:
-          query['id'] = kind;
-          query['type'] = 'type';
+      final Map<String, dynamic> query = {
+        'kind': kind,
+        'page': page,
+      };
+      if (kind == 'genre' && genreId != null) {
+        query['id'] = genreId;
       }
 
       final response = await _dioClient.get(
-        '${ApiConstants.aniziumApiBaseUrl}/page/catalog',
+        '/api/anizium/catalog',
         queryParameters: query,
       );
       return _parseList(response.data);
-    } on ServerException catch (e) {
-      if (e.message.contains('502') ||
-          e.message.contains('400') ||
-          e.message.contains('500') ||
-          e.message.contains('bulunamadı')) {
-        return [];
-      }
-      return [];
     } catch (_) {
       return [];
     }

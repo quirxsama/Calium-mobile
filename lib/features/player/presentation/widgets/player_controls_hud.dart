@@ -197,8 +197,8 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
                   const SizedBox(width: AppSpacing.sm),
 
                   // Quick Setting Badges (Horizontally scrollable to prevent overflow)
-                  Flexible(
-                    flex: 0,
+                  Expanded(
+                    flex: 2,
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       physics: const BouncingScrollPhysics(),
@@ -249,12 +249,16 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
 
                           // Aspect Ratio Toggle
                           IconButton(
-                            tooltip: widget.isFitCover ? 'Ekrana Sığdır' : 'Ekranı Doldur',
+                            tooltip: widget.isFitCover
+                                ? 'Ekrana Sığdır'
+                                : 'Ekranı Doldur',
                             icon: Icon(
                               widget.isFitCover
                                   ? Icons.fit_screen_rounded
                                   : Icons.aspect_ratio_rounded,
-                              color: widget.isFitCover ? AppColors.primary : Colors.white,
+                              color: widget.isFitCover
+                                  ? AppColors.primary
+                                  : Colors.white,
                               size: 20,
                             ),
                             onPressed: widget.onToggleAspectRatio,
@@ -279,88 +283,91 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
             ),
 
             // ─── Center Controls: Perfectly Balanced 5-Button Cluster ───
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 1. Previous Episode
-                _buildCircularControlButton(
-                  icon: Icons.skip_previous_rounded,
-                  size: 46,
-                  iconSize: 26,
-                  tooltip: 'Önceki Bölüm',
-                  isEnabled: widget.onPreviousEpisode != null,
-                  onPressed: widget.onPreviousEpisode ?? () {},
-                ),
-                const SizedBox(width: 24),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 1. Previous Episode
+                  _buildCircularControlButton(
+                    icon: Icons.skip_previous_rounded,
+                    size: 46,
+                    iconSize: 26,
+                    tooltip: 'Önceki Bölüm',
+                    isEnabled: widget.onPreviousEpisode != null,
+                    onPressed: widget.onPreviousEpisode ?? () {},
+                  ),
+                  const SizedBox(width: 24),
 
-                // 2. Rewind 10s
-                _buildCircularControlButton(
-                  icon: Icons.replay_10_rounded,
-                  size: 52,
-                  iconSize: 30,
-                  tooltip: '10 Saniye Geri',
-                  isEnabled: true,
-                  onPressed: widget.onSeekBackward,
-                ),
-                const SizedBox(width: 28),
+                  // 2. Rewind 10s
+                  _buildCircularControlButton(
+                    icon: Icons.replay_10_rounded,
+                    size: 52,
+                    iconSize: 30,
+                    tooltip: '10 Saniye Geri',
+                    isEnabled: true,
+                    onPressed: widget.onSeekBackward,
+                  ),
+                  const SizedBox(width: 28),
 
-                // 3. Center Play/Pause with Soft Glow
-                GestureDetector(
-                  onTap: widget.onPlayPause,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOutCubic,
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primary.withAlpha(150),
-                          blurRadius: 24,
-                          spreadRadius: 3,
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        child: Icon(
-                          widget.isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          key: ValueKey<bool>(widget.isPlaying),
-                          color: Colors.black,
-                          size: 42,
+                  // 3. Center Play/Pause with Soft Glow
+                  GestureDetector(
+                    onTap: widget.onPlayPause,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      width: 70,
+                      height: 70,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withAlpha(150),
+                            blurRadius: 24,
+                            spreadRadius: 3,
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: Icon(
+                            widget.isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                            key: ValueKey<bool>(widget.isPlaying),
+                            color: Colors.black,
+                            size: 42,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 28),
+                  const SizedBox(width: 28),
 
-                // 4. Forward 10s
-                _buildCircularControlButton(
-                  icon: Icons.forward_10_rounded,
-                  size: 52,
-                  iconSize: 30,
-                  tooltip: '10 Saniye İleri',
-                  isEnabled: true,
-                  onPressed: widget.onSeekForward,
-                ),
-                const SizedBox(width: 24),
+                  // 4. Forward 10s
+                  _buildCircularControlButton(
+                    icon: Icons.forward_10_rounded,
+                    size: 52,
+                    iconSize: 30,
+                    tooltip: '10 Saniye İleri',
+                    isEnabled: true,
+                    onPressed: widget.onSeekForward,
+                  ),
+                  const SizedBox(width: 24),
 
-                // 5. Next Episode
-                _buildCircularControlButton(
-                  icon: Icons.skip_next_rounded,
-                  size: 46,
-                  iconSize: 26,
-                  tooltip: 'Sonraki Bölüm',
-                  isEnabled: widget.onNextEpisode != null,
-                  onPressed: widget.onNextEpisode ?? () {},
-                ),
-              ],
+                  // 5. Next Episode
+                  _buildCircularControlButton(
+                    icon: Icons.skip_next_rounded,
+                    size: 46,
+                    iconSize: 26,
+                    tooltip: 'Sonraki Bölüm',
+                    isEnabled: widget.onNextEpisode != null,
+                    onPressed: widget.onNextEpisode ?? () {},
+                  ),
+                ],
+              ),
             ),
 
             // ─── Bottom Timeline, Sliders & Time Counter ───────────────
@@ -370,7 +377,11 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
                   ? ValueListenableBuilder<Duration>(
                       valueListenable: widget.positionListenable!,
                       builder: (context, currentPos, _) {
-                        return _buildTimelineRow(context, currentPos, maxDurationMs);
+                        return _buildTimelineRow(
+                          context,
+                          currentPos,
+                          maxDurationMs,
+                        );
                       },
                     )
                   : _buildTimelineRow(context, widget.position, maxDurationMs),
@@ -381,12 +392,19 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
     );
   }
 
-  Widget _buildTimelineRow(BuildContext context, Duration currentPos, double maxDurationMs) {
-    final currentPosMs = currentPos.inMilliseconds.toDouble().clamp(0.0, maxDurationMs);
-    final displayTimeStr = _isSeeking 
-        ? Duration(milliseconds: _localSeekPosition.toInt()).toMinSecString() 
+  Widget _buildTimelineRow(
+    BuildContext context,
+    Duration currentPos,
+    double maxDurationMs,
+  ) {
+    final currentPosMs = currentPos.inMilliseconds.toDouble().clamp(
+      0.0,
+      maxDurationMs,
+    );
+    final displayTimeStr = _isSeeking
+        ? Duration(milliseconds: _localSeekPosition.toInt()).toMinSecString()
         : currentPos.toMinSecString();
-    
+
     final sliderValue = _isSeeking ? _localSeekPosition : currentPosMs;
 
     return Row(
@@ -485,11 +503,7 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
                 : null,
           ),
           child: Center(
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: iconSize,
-            ),
+            child: Icon(icon, color: Colors.white, size: iconSize),
           ),
         ),
       ),

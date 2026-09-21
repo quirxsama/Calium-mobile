@@ -34,11 +34,29 @@ class _CalendarScreenState extends State<CalendarScreen> {
         final diff = itemDay.difference(today).inDays;
 
         const turkishMonths = [
-          '', 'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
-          'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+          '',
+          'Ocak',
+          'Şubat',
+          'Mart',
+          'Nisan',
+          'Mayıs',
+          'Haziran',
+          'Temmuz',
+          'Ağustos',
+          'Eylül',
+          'Ekim',
+          'Kasım',
+          'Aralık',
         ];
         const turkishDays = [
-          '', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'
+          '',
+          'Pazartesi',
+          'Salı',
+          'Çarşamba',
+          'Perşembe',
+          'Cuma',
+          'Cumartesi',
+          'Pazar',
         ];
 
         final dayStr = turkishDays[dt.weekday];
@@ -75,11 +93,50 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
 
     // Slug cleanup: replace _/- with spaces and capitalize first letter
-    final cleaned = raw
-        .replaceAll(RegExp(r'[_\-]+'), ' ')
-        .trim();
+    final cleaned = raw.replaceAll(RegExp(r'[_\-]+'), ' ').trim();
     if (cleaned.isEmpty) return 'Gün';
     return cleaned[0].toUpperCase() + cleaned.substring(1);
+  }
+
+  int _findTodayIndex(List<CalendarDayEntity> days) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    for (int i = 0; i < days.length; i++) {
+      final day = days[i];
+      for (final item in day.items) {
+        if (item.releaseDate != null) {
+          final dt = item.releaseDate!;
+          final itemDay = DateTime(dt.year, dt.month, dt.day);
+          if (itemDay.year == today.year &&
+              itemDay.month == today.month &&
+              itemDay.day == today.day) {
+            return i;
+          }
+        }
+      }
+    }
+
+    const turkishDays = [
+      '',
+      'pazartesi',
+      'salı',
+      'çarşamba',
+      'perşembe',
+      'cuma',
+      'cumartesi',
+      'pazar',
+    ];
+    final todayWeekdayName = turkishDays[now.weekday];
+
+    for (int i = 0; i < days.length; i++) {
+      final title = (days[i].dayName ?? days[i].title).toLowerCase();
+      if (title.contains('bugün') || title.contains(todayWeekdayName)) {
+        return i;
+      }
+    }
+
+    return 0;
   }
 
   @override
@@ -90,18 +147,26 @@ class _CalendarScreenState extends State<CalendarScreen> {
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
           onPressed: () => context.pop(),
         ),
         title: Text(
           'Yayın Takvimi',
-          style: AppTypography.headlineMedium.copyWith(fontWeight: FontWeight.w800),
+          style: AppTypography.headlineMedium.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
         ),
       ),
       body: BlocBuilder<CalendarBloc, CalendarState>(
         builder: (context, state) {
           if (state is CalendarLoading || state is CalendarInitial) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            );
           }
 
           if (state is CalendarFailure) {
@@ -109,12 +174,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.error_outline_rounded, color: AppColors.accentCrimson, size: 48),
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: AppColors.accentCrimson,
+                    size: 48,
+                  ),
                   const SizedBox(height: 12),
                   Text(state.message, style: AppTypography.bodyMedium),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => context.read<CalendarBloc>().add(LoadCalendarRequested()),
+                    onPressed: () => context.read<CalendarBloc>().add(
+                      LoadCalendarRequested(),
+                    ),
                     child: const Text('Tekrar Dene'),
                   ),
                 ],
@@ -125,12 +196,19 @@ class _CalendarScreenState extends State<CalendarScreen> {
           if (state is CalendarLoaded) {
             if (state.days.isEmpty) {
               return const Center(
-                child: Text('Takvimde gösterilecek içerik bulunamadı.', style: TextStyle(color: AppColors.textMuted)),
+                child: Text(
+                  'Takvimde gösterilecek içerik bulunamadı.',
+                  style: TextStyle(color: AppColors.textMuted),
+                ),
               );
             }
 
+            final initialIndex = _findTodayIndex(state.days)
+                .clamp(0, state.days.length - 1);
+
             return DefaultTabController(
               length: state.days.length,
+              initialIndex: initialIndex,
               child: Column(
                 children: [
                   // Day Tabs
@@ -139,7 +217,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     indicatorColor: AppColors.primary,
                     labelColor: AppColors.primary,
                     unselectedLabelColor: AppColors.textSecondary,
-                    labelStyle: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.bold),
+                    labelStyle: AppTypography.titleSmall.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                     tabs: state.days.map((d) {
                       return Tab(text: _formatDayTabTitle(d));
                     }).toList(),
@@ -198,7 +278,9 @@ class _DayItemsGrid extends StatelessWidget {
               children: [
                 // Poster
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
+                  borderRadius: BorderRadius.circular(
+                    AppSpacing.borderRadiusSm,
+                  ),
                   child: SizedBox(
                     width: 70,
                     height: 95,
@@ -217,7 +299,10 @@ class _DayItemsGrid extends StatelessWidget {
                     children: [
                       if (item.category != null) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.primary.withAlpha(30),
                             borderRadius: BorderRadius.circular(4),
@@ -243,15 +328,22 @@ class _DayItemsGrid extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
-                      if (item.seasonNumber != null || item.episodeNumber != null)
+                      if (item.seasonNumber != null ||
+                          item.episodeNumber != null)
                         Text(
                           '${item.seasonNumber != null ? '${item.seasonNumber}. Sezon ' : ''}${item.episodeNumber != null ? '· ${item.episodeNumber}. Bölüm' : ''}',
-                          style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
                         ),
                     ],
                   ),
                 ),
-                const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 16),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: AppColors.textMuted,
+                  size: 16,
+                ),
               ],
             ),
           ),

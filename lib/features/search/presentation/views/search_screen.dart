@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -7,6 +6,7 @@ import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/anime_poster_card.dart';
+import 'package:calium_stream/core/widgets/adaptive_poster_grid.dart';
 import 'package:calium_stream/core/widgets/shimmer_placeholder.dart';
 import 'package:calium_stream/features/search/presentation/bloc/search_bloc.dart';
 import 'package:calium_stream/features/search/presentation/widgets/filter_bottom_sheet.dart';
@@ -55,8 +55,8 @@ class _SearchScreenState extends State<SearchScreen> {
         initialType: state?.selectedType,
         onApply: (genreId, type) {
           context.read<SearchBloc>().add(
-                SearchFilterApplied(genreId: genreId, type: type),
-              );
+            SearchFilterApplied(genreId: genreId, type: type),
+          );
         },
       ),
     );
@@ -81,9 +81,10 @@ class _SearchScreenState extends State<SearchScreen> {
                         color: AppColors.textPrimary,
                       ),
                       onChanged: (query) {
-                        context
-                            .read<SearchBloc>()
-                            .add(SearchQueryChanged(query: query));
+                        setState(() {});
+                        context.read<SearchBloc>().add(
+                          SearchQueryChanged(query: query),
+                        );
                       },
                       decoration: InputDecoration(
                         hintText: 'Anime ara...',
@@ -94,15 +95,17 @@ class _SearchScreenState extends State<SearchScreen> {
                         ),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
+                                tooltip: 'Aramayı temizle',
                                 icon: const Icon(
                                   Icons.clear_rounded,
                                   color: AppColors.textSecondary,
                                 ),
                                 onPressed: () {
                                   _searchController.clear();
+                                  setState(() {});
                                   context.read<SearchBloc>().add(
-                                        const SearchQueryChanged(query: ''),
-                                      );
+                                    const SearchQueryChanged(query: ''),
+                                  );
                                 },
                               )
                             : null,
@@ -127,10 +130,12 @@ class _SearchScreenState extends State<SearchScreen> {
                   BlocBuilder<SearchBloc, SearchState>(
                     builder: (context, state) {
                       final loaded = state is SearchLoaded ? state : null;
-                      final hasActiveFilters = loaded?.selectedGenreId != null ||
+                      final hasActiveFilters =
+                          loaded?.selectedGenreId != null ||
                           loaded?.selectedType != null;
 
                       return IconButton.filled(
+                        tooltip: 'Arama filtreleri',
                         onPressed: () => _openFilters(loaded),
                         icon: Icon(
                           hasActiveFilters
@@ -170,10 +175,7 @@ class _SearchScreenState extends State<SearchScreen> {
                             color: AppColors.textMuted,
                           ),
                           const SizedBox(height: AppSpacing.md),
-                          Text(
-                            state.message,
-                            style: AppTypography.bodyMedium,
-                          ),
+                          Text(state.message, style: AppTypography.bodyMedium),
                         ],
                       ),
                     );
@@ -205,20 +207,11 @@ class _SearchScreenState extends State<SearchScreen> {
                       );
                     }
 
-                    return GridView.builder(
+                    return AdaptivePosterGrid(
                       controller: _scrollController,
-                      scrollCacheExtent: ScrollCacheExtent.pixels(600),
-                      addRepaintBoundaries: true,
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.screenPadding,
                         vertical: AppSpacing.sm,
-                      ),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        childAspectRatio: 0.65,
-                        crossAxisSpacing: AppSpacing.sm,
-                        mainAxisSpacing: AppSpacing.md,
                       ),
                       itemCount: state.results.length,
                       itemBuilder: (context, index) {
@@ -246,22 +239,14 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildGridSkeleton() {
-    return GridView.builder(
+    return AdaptivePosterGrid(
       padding: const EdgeInsets.all(AppSpacing.screenPadding),
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 0.65,
-        crossAxisSpacing: AppSpacing.sm,
-        mainAxisSpacing: AppSpacing.md,
-      ),
       itemCount: 9,
       itemBuilder: (_, _) => const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: ShimmerPlaceholder(borderRadius: 12),
-          ),
+          Expanded(child: ShimmerPlaceholder(borderRadius: 12)),
           SizedBox(height: 6),
           ShimmerPlaceholder(width: 80, height: 12),
         ],

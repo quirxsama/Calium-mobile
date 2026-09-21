@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,6 +7,7 @@ import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/anime_poster_card.dart';
+import 'package:calium_stream/core/widgets/adaptive_poster_grid.dart';
 import 'package:calium_stream/core/widgets/shimmer_placeholder.dart';
 import 'package:calium_stream/features/explore/presentation/bloc/explore_bloc.dart';
 
@@ -32,7 +32,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    context.read<ExploreBloc>().add(const LoadExploreCatalogRequested(kind: 'series'));
+    context.read<ExploreBloc>().add(
+      const LoadExploreCatalogRequested(kind: 'series'),
+    );
   }
 
   void _onScroll() {
@@ -65,7 +67,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
       body: BlocBuilder<ExploreBloc, ExploreState>(
         builder: (context, state) {
           final currentKind = (state is ExploreLoaded) ? state.kind : 'series';
-          final currentGenreId = (state is ExploreLoaded) ? state.genreId : null;
+          final currentGenreId = (state is ExploreLoaded)
+              ? state.genreId
+              : null;
 
           return Column(
             children: [
@@ -87,19 +91,23 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         selectedColor: AppColors.primary,
                         backgroundColor: AppColors.surfaceElevated,
                         labelStyle: AppTypography.titleSmall.copyWith(
-                          color: isSelected ? Colors.white : AppColors.textSecondary,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                          color: isSelected
+                              ? AppColors.background
+                              : AppColors.textSecondary,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                         ),
                         onSelected: (selected) {
                           if (selected) {
                             context.read<ExploreBloc>().add(
-                                  ChangeExploreCategoryRequested(
-                                    kind: cat['id']!,
-                                    genreId: cat['id'] == 'genre'
-                                        ? (currentGenreId ?? '62263')
-                                        : null,
-                                  ),
-                                );
+                              ChangeExploreCategoryRequested(
+                                kind: cat['id']!,
+                                genreId: cat['id'] == 'genre'
+                                    ? (currentGenreId ?? '62263')
+                                    : null,
+                              ),
+                            );
                           }
                         },
                       ),
@@ -112,14 +120,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
               if (currentKind == 'genre') ...[
                 const SizedBox(height: AppSpacing.xs),
                 SizedBox(
-                  height: 38,
+                  height: 32 + MediaQuery.textScalerOf(context).scale(16),
                   child: ListView(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppSpacing.screenPadding,
                     ),
                     children: ApiConstants.genreIds.entries.map((entry) {
-                      final isSelected = currentGenreId == entry.value.toString();
+                      final isSelected =
+                          currentGenreId == entry.value.toString();
                       final cleanName = entry.key.replaceAll('_', ' ');
 
                       return Padding(
@@ -132,21 +141,27 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           backgroundColor: AppColors.surfaceDark,
                           shape: StadiumBorder(
                             side: BorderSide(
-                              color: isSelected ? AppColors.primary : AppColors.border,
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : AppColors.border,
                               width: isSelected ? 1.5 : 0.5,
                             ),
                           ),
                           labelStyle: AppTypography.caption.copyWith(
-                            color: isSelected ? AppColors.primary : AppColors.textSecondary,
-                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected
+                                ? AppColors.primary
+                                : AppColors.textSecondary,
+                            fontWeight: isSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                           ),
                           onSelected: (_) {
                             context.read<ExploreBloc>().add(
-                                  ChangeExploreCategoryRequested(
-                                    kind: 'genre',
-                                    genreId: entry.value.toString(),
-                                  ),
-                                );
+                              ChangeExploreCategoryRequested(
+                                kind: 'genre',
+                                genreId: entry.value.toString(),
+                              ),
+                            );
                           },
                         ),
                       );
@@ -158,9 +173,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               const SizedBox(height: AppSpacing.sm),
 
               // Content Grid
-              Expanded(
-                child: _buildContent(context, state),
-              ),
+              Expanded(child: _buildContent(context, state)),
             ],
           );
         },
@@ -170,14 +183,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   Widget _buildContent(BuildContext context, ExploreState state) {
     if (state is ExploreLoading || state is ExploreInitial) {
-      return GridView.builder(
-        padding: const EdgeInsets.all(AppSpacing.screenPadding),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          childAspectRatio: 0.58,
-          crossAxisSpacing: AppSpacing.sm,
-          mainAxisSpacing: AppSpacing.md,
-        ),
+      return AdaptivePosterGrid(
         itemCount: 12,
         itemBuilder: (_, _) => const ShimmerPlaceholder(),
       );
@@ -199,8 +205,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ElevatedButton(
               onPressed: () {
                 context.read<ExploreBloc>().add(
-                      const LoadExploreCatalogRequested(kind: 'series'),
-                    );
+                  const LoadExploreCatalogRequested(kind: 'series'),
+                );
               },
               child: const Text('Tekrar Dene'),
             ),
@@ -223,7 +229,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
               const SizedBox(height: 12),
               Text(
                 'Bu kategoride içerik bulunamadı',
-                style: AppTypography.bodyMedium.copyWith(color: AppColors.textSecondary),
+                style: AppTypography.bodyMedium.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -233,23 +241,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
       return RefreshIndicator(
         onRefresh: () async {
           context.read<ExploreBloc>().add(
-                ChangeExploreCategoryRequested(
-                  kind: state.kind,
-                  genreId: state.genreId,
-                ),
-              );
+            ChangeExploreCategoryRequested(
+              kind: state.kind,
+              genreId: state.genreId,
+            ),
+          );
         },
-        child: GridView.builder(
+        child: AdaptivePosterGrid(
           controller: _scrollController,
-          scrollCacheExtent: ScrollCacheExtent.pixels(600),
-          addRepaintBoundaries: true,
-          padding: const EdgeInsets.all(AppSpacing.screenPadding),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            childAspectRatio: 0.65,
-            crossAxisSpacing: AppSpacing.sm,
-            mainAxisSpacing: AppSpacing.md,
-          ),
           itemCount: state.items.length + (state.isLoadingMore ? 3 : 0),
           itemBuilder: (context, index) {
             if (index >= state.items.length) {

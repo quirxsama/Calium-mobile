@@ -38,6 +38,10 @@ class HomeRepositoryImpl implements HomeRepository {
       // Top Ranked 10
       final topRanked = (topAnime.isNotEmpty ? topAnime : topAiring).take(10).toList();
 
+      if (trending.isEmpty && topAiring.isEmpty && seasonal.isEmpty && results.every((r) => r.isEmpty)) {
+        return const Left(ServerFailure(message: 'İçerik yüklenemedi. Lütfen bağlantınızı kontrol edip tekrar deneyin.'));
+      }
+
       return Right(
         HomeFeedEntity(
           trending: trending,

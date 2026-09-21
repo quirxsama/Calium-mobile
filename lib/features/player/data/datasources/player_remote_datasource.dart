@@ -33,6 +33,22 @@ class PlayerRemoteDataSourceImpl implements PlayerRemoteDataSource {
     required int season,
     required int episode,
   }) async {
+    // 1. Try Calium proxy first (Cloudflare bypass & reliable video links)
+    try {
+      final response = await _dioClient.get(
+        '/api/anizium/episode',
+        queryParameters: {
+          'animeId': animeId,
+          'season': season,
+          'episode': episode,
+        },
+      );
+      if (response.data is Map<String, dynamic>) {
+        return VideoSourceModel.fromJson(response.data as Map<String, dynamic>);
+      }
+    } catch (_) {}
+
+    // 2. Direct Anizium API fallback
     try {
       final response = await _dioClient.get(
         '${ApiConstants.aniziumApiBaseUrl}/anime/source',

@@ -44,9 +44,13 @@ abstract class SocialRemoteDataSource {
   Future<List<SearchedUserEntity>> searchUsers(String query);
   Future<String> toggleFollow(String username);
   Future<List<FollowRequestEntity>> getFollowRequests();
-  Future<void> respondFollowRequest({required String username, required bool accept});
+  Future<void> respondFollowRequest({
+    required String username,
+    required bool accept,
+  });
   Future<List<AppNotificationEntity>> getNotifications();
   Future<void> markNotificationsRead();
+  Future<void> clearAllNotifications();
 }
 
 class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
@@ -122,7 +126,9 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
         data: {'code': code.trim().toUpperCase()},
       );
       final data = response.data;
-      if (data is Map<String, dynamic> && data['success'] == true && data['room'] != null) {
+      if (data is Map<String, dynamic> &&
+          data['success'] == true &&
+          data['room'] != null) {
         final r = data['room'] as Map<String, dynamic>;
         return RoomEntity(
           id: r['id']?.toString() ?? '',
@@ -134,7 +140,9 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
           poster: ImageUtils.cleanImageUrl(r['poster']?.toString()),
         );
       }
-      throw ServerException(message: data['error']?.toString() ?? 'Odaya katılamadı.');
+      throw ServerException(
+        message: data['error']?.toString() ?? 'Odaya katılamadı.',
+      );
     } catch (e) {
       if (e is ServerException) rethrow;
       throw ServerException(message: e.toString());
@@ -163,7 +171,9 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
         },
       );
       final data = response.data;
-      if (data is Map<String, dynamic> && data['success'] == true && data['room'] != null) {
+      if (data is Map<String, dynamic> &&
+          data['success'] == true &&
+          data['room'] != null) {
         final r = data['room'] as Map<String, dynamic>;
         return RoomEntity(
           id: r['id']?.toString() ?? '',
@@ -176,7 +186,9 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
           isPublic: isPublic,
         );
       }
-      throw ServerException(message: data['error']?.toString() ?? 'Oda oluşturulamadı.');
+      throw ServerException(
+        message: data['error']?.toString() ?? 'Oda oluşturulamadı.',
+      );
     } catch (e) {
       if (e is ServerException) rethrow;
       throw ServerException(message: e.toString());
@@ -207,16 +219,16 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
   Future<List<SocialFriendEntity>> getFriends() async {
     final Map<String, SocialFriendEntity> friendsMap = {};
 
-    final currentUsername = await _secureStorage.read(key: StorageKeys.currentUser);
+    final currentUsername = await _secureStorage.read(
+      key: StorageKeys.currentUser,
+    );
     final userPath = (currentUsername != null && currentUsername.isNotEmpty)
         ? currentUsername
         : 'me';
 
     // 1. Fetch mutual friends
     try {
-      final response = await _dioClient.get(
-        '/api/users/$userPath/friends',
-      );
+      final response = await _dioClient.get('/api/users/$userPath/friends');
       final data = response.data;
       if (data is Map<String, dynamic> && data['items'] is List) {
         for (final u in data['items'] as List) {
@@ -239,9 +251,7 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
 
     // 2. Fetch following
     try {
-      final response = await _dioClient.get(
-        '/api/users/$userPath/following',
-      );
+      final response = await _dioClient.get('/api/users/$userPath/following');
       final data = response.data;
       if (data is Map<String, dynamic> && data['items'] is List) {
         for (final u in data['items'] as List) {
@@ -292,7 +302,9 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
   @override
   Future<String> toggleFollow(String username) async {
     try {
-      final response = await _dioClient.post<Map<String, dynamic>>('/api/users/$username/follow');
+      final response = await _dioClient.post<Map<String, dynamic>>(
+        '/api/users/$username/follow',
+      );
       final data = response.data;
       if (data != null) {
         return data['status']?.toString() ?? 'followed';
@@ -316,8 +328,12 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
             id: r['id']?.toString() ?? '',
             username: requester?['username']?.toString() ?? '',
             displayName: requester?['displayName']?.toString(),
-            avatarUrl: ImageUtils.cleanImageUrl(requester?['avatarUrl']?.toString()),
-            createdAt: r['createdAt'] != null ? DateTime.tryParse(r['createdAt'].toString()) : null,
+            avatarUrl: ImageUtils.cleanImageUrl(
+              requester?['avatarUrl']?.toString(),
+            ),
+            createdAt: r['createdAt'] != null
+                ? DateTime.tryParse(r['createdAt'].toString())
+                : null,
           );
         }).toList();
       }
@@ -328,7 +344,10 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
   }
 
   @override
-  Future<void> respondFollowRequest({required String username, required bool accept}) async {
+  Future<void> respondFollowRequest({
+    required String username,
+    required bool accept,
+  }) async {
     try {
       await _dioClient.patch(
         '/api/follow/requests/$username',
@@ -351,25 +370,32 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
           final type = n['type']?.toString() ?? '';
           String title = 'Bildirim';
           String body = '';
-          String? avatarUrl = ImageUtils.cleanImageUrl(payload['avatarUrl']?.toString());
+          String? avatarUrl = ImageUtils.cleanImageUrl(
+            payload['avatarUrl']?.toString(),
+          );
           String? actorUsername = payload['username']?.toString();
           String? animeId = payload['animeId']?.toString();
 
           if (type == 'follow') {
             title = 'Yeni Takipçi';
-            body = '${payload['displayName'] ?? actorUsername ?? "Bir kullanıcı"} seni takip etmeye başladı.';
+            body =
+                '${payload['displayName'] ?? actorUsername ?? "Bir kullanıcı"} seni takip etmeye başladı.';
           } else if (type == 'follow_request') {
             title = 'Takip İsteği';
-            body = '${payload['displayName'] ?? actorUsername ?? "Bir kullanıcı"} seni takip etmek istiyor.';
+            body =
+                '${payload['displayName'] ?? actorUsername ?? "Bir kullanıcı"} seni takip etmek istiyor.';
           } else if (type == 'follow_accepted') {
             title = 'Takip İsteği Kabul Edildi';
-            body = '${payload['displayName'] ?? actorUsername ?? "Bir kullanıcı"} takip isteğini kabul etti.';
+            body =
+                '${payload['displayName'] ?? actorUsername ?? "Bir kullanıcı"} takip isteğini kabul etti.';
           } else if (type == 'new_episode') {
             title = 'Yeni Bölüm Yayında!';
-            body = '${payload['animeTitle'] ?? "Favori animenizin"} yeni bölümü (${payload['episodeNumber'] ?? "Yeni Bölüm"}) yayınlandı.';
+            body =
+                '${payload['animeTitle'] ?? "Favori animenizin"} yeni bölümü (${payload['episodeNumber'] ?? "Yeni Bölüm"}) yayınlandı.';
           } else if (type == 'room_invite') {
             title = 'Oda Daveti';
-            body = '${payload['inviterName'] ?? "Bir arkadaşın"} seni "${payload['roomName'] ?? "Birlikte İzle"}" odasına davet etti.';
+            body =
+                '${payload['inviterName'] ?? "Bir arkadaşın"} seni "${payload['roomName'] ?? "Birlikte İzle"}" odasına davet etti.';
           }
 
           return AppNotificationEntity(
@@ -380,8 +406,12 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
             avatarUrl: avatarUrl,
             actorUsername: actorUsername,
             animeId: animeId,
-            readAt: n['readAt'] != null ? DateTime.tryParse(n['readAt'].toString()) : null,
-            createdAt: n['createdAt'] != null ? DateTime.tryParse(n['createdAt'].toString()) : null,
+            readAt: n['readAt'] != null
+                ? DateTime.tryParse(n['readAt'].toString())
+                : null,
+            createdAt: n['createdAt'] != null
+                ? DateTime.tryParse(n['createdAt'].toString())
+                : null,
           );
         }).toList();
       }
@@ -395,6 +425,13 @@ class SocialRemoteDataSourceImpl implements SocialRemoteDataSource {
   Future<void> markNotificationsRead() async {
     try {
       await _dioClient.patch('/api/notifications', data: {'all': true});
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> clearAllNotifications() async {
+    try {
+      await _dioClient.delete('/api/notifications');
     } catch (_) {}
   }
 }

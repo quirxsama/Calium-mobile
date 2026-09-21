@@ -7,6 +7,8 @@ import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/anime_poster_card.dart';
+import 'package:calium_stream/core/widgets/adaptive_poster_grid.dart';
+import 'package:calium_stream/core/widgets/app_content_frame.dart';
 import 'package:calium_stream/features/user_lists/domain/entities/user_list_entity.dart';
 import 'package:calium_stream/features/user_lists/domain/repositories/user_lists_repository.dart';
 import 'package:calium_stream/features/user_lists/presentation/bloc/user_lists_bloc.dart';
@@ -37,7 +39,9 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
       _error = null;
     });
 
-    final res = await GetIt.I<UserListsRepository>().getListDetails(widget.listId);
+    final res = await GetIt.I<UserListsRepository>().getListDetails(
+      widget.listId,
+    );
     res.fold(
       (f) => setState(() {
         _error = f.message;
@@ -57,7 +61,11 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
         backgroundColor: AppColors.surfaceDark,
         title: const Text(
           'Listeden Kaldır',
-          style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Text(
           '"${item.name}" bu listeden kaldırılsın mı?',
@@ -66,13 +74,19 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Vazgeç',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text(
               'Kaldır',
-              style: TextStyle(color: AppColors.accentCrimson, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: AppColors.accentCrimson,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         ],
@@ -84,16 +98,12 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
       listId: widget.listId,
       animeId: item.animeId,
     );
-    res.fold(
-      (f) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(f.message)),
-          );
-        }
-      },
-      (_) => _fetchDetails(),
-    );
+    res.fold((f) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(f.message)));
+      }
+    }, (_) => _fetchDetails());
   }
 
   @override
@@ -104,12 +114,18 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
           onPressed: () => context.pop(),
         ),
         title: Text(
           _list?.name ?? 'Liste Detayı',
-          style: AppTypography.headlineMedium.copyWith(fontWeight: FontWeight.w800),
+          style: AppTypography.headlineMedium.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -117,12 +133,19 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
           if (_list != null)
             IconButton(
               icon: Icon(
-                _list!.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                _list!.isLiked
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
                 color: _list!.isLiked ? AppColors.accentCrimson : Colors.white,
               ),
               onPressed: () {
                 final wasLiked = _list!.isLiked;
-                context.read<UserListsBloc>().add(ToggleLikeListRequested(widget.listId, currentlyLiked: wasLiked));
+                context.read<UserListsBloc>().add(
+                  ToggleLikeListRequested(
+                    widget.listId,
+                    currentlyLiked: wasLiked,
+                  ),
+                );
                 setState(() {
                   _list = UserListEntity(
                     id: _list!.id,
@@ -131,7 +154,9 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                     description: _list!.description,
                     isPublic: _list!.isPublic,
                     itemCount: _list!.itemCount,
-                    likeCount: _list!.isLiked ? _list!.likeCount - 1 : _list!.likeCount + 1,
+                    likeCount: _list!.isLiked
+                        ? _list!.likeCount - 1
+                        : _list!.likeCount + 1,
                     isLiked: !_list!.isLiked,
                     items: _list!.items,
                     creatorUsername: _list!.creatorUsername,
@@ -143,97 +168,117 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
           : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline_rounded, color: AppColors.accentCrimson, size: 48),
-                      const SizedBox(height: 12),
-                      Text(_error!, style: AppTypography.bodyMedium),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _fetchDetails,
-                        child: const Text('Tekrar Dene'),
-                      ),
-                    ],
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: AppColors.accentCrimson,
+                    size: 48,
                   ),
-                )
-              : _list == null
-                  ? const SizedBox.shrink()
-                  : CustomScrollView(
-                      slivers: [
-                        // Description Header
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.all(AppSpacing.screenPadding),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (_list!.description != null && _list!.description!.isNotEmpty)
-                                  Text(_list!.description!, style: AppTypography.bodyMedium),
-                                const SizedBox(height: AppSpacing.sm),
-                                Row(
-                                  children: [
-                                    Text(
-                                      '${_list!.items.length} Anime',
-                                      style: AppTypography.caption.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    if (_list!.creatorUsername != null)
-                                      Text(
-                                        'Oluşturan: @${_list!.creatorUsername}',
-                                        style: AppTypography.caption.copyWith(color: AppColors.textSecondary),
-                                      ),
-                                  ],
+                  const SizedBox(height: 12),
+                  Text(_error!, style: AppTypography.bodyMedium),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _fetchDetails,
+                    child: const Text('Tekrar Dene'),
+                  ),
+                ],
+              ),
+            )
+          : _list == null
+          ? const SizedBox.shrink()
+          : AppContentFrame(
+              child: CustomScrollView(
+                slivers: [
+                  // Description Header
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.screenPadding),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_list!.description != null &&
+                              _list!.description!.isNotEmpty)
+                            Text(
+                              _list!.description!,
+                              style: AppTypography.bodyMedium,
+                            ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: [
+                              Text(
+                                '${_list!.items.length} Anime',
+                                style: AppTypography.caption.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                              ],
-                            ),
+                              ),
+                              if (_list!.creatorUsername != null)
+                                Text(
+                                  'Oluşturan: @${_list!.creatorUsername}',
+                                  style: AppTypography.caption.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                            ],
                           ),
-                        ),
-
-                        // Anime Grid
-                        if (_list!.items.isEmpty)
-                          const SliverFillRemaining(
-                            child: Center(
-                              child: Text(
-                                'Bu listede henüz anime bulunmuyor.',
-                                style: TextStyle(color: AppColors.textMuted),
-                              ),
-                            ),
-                          )
-                        else
-                          SliverPadding(
-                            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenPadding),
-                            sliver: SliverGrid(
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                childAspectRatio: 0.55,
-                                crossAxisSpacing: 10,
-                                mainAxisSpacing: 10,
-                              ),
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  final item = _list!.items[index];
-                                  return GestureDetector(
-                                    onLongPress: () => _confirmRemoveItem(item),
-                                    child: AnimePosterCard(
-                                      id: item.animeId,
-                                      title: item.name,
-                                      posterUrl: item.poster ?? '',
-                                      onTap: () {
-                                        context.push('/anime/${item.animeId}');
-                                      },
-                                    ),
-                                  );
-                                },
-                                childCount: _list!.items.length,
-                              ),
-                            ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
+                  ),
+
+                  // Anime Grid
+                  if (_list!.items.isEmpty)
+                    const SliverFillRemaining(
+                      child: Center(
+                        child: Text(
+                          'Bu listede henüz anime bulunmuyor.',
+                          style: TextStyle(color: AppColors.textMuted),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.screenPadding,
+                      ),
+                      sliver: SliverLayoutBuilder(
+                        builder: (context, constraints) => SliverGrid(
+                          gridDelegate: AdaptivePosterGrid.delegateFor(
+                            context,
+                            constraints.crossAxisExtent,
+                          ),
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final item = _list!.items[index];
+                            return GestureDetector(
+                              onLongPress: () => _confirmRemoveItem(item),
+                              child: AnimePosterCard(
+                                id: item.animeId,
+                                title: item.name,
+                                posterUrl: item.poster ?? '',
+                                onTap: () {
+                                  context.push('/anime/${item.animeId}');
+                                },
+                              ),
+                            );
+                          }, childCount: _list!.items.length),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
     );
   }
 }

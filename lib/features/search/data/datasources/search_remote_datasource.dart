@@ -1,5 +1,3 @@
-import 'package:calium_stream/core/constants/api_constants.dart';
-import 'package:calium_stream/core/error/exceptions.dart';
 import 'package:calium_stream/core/network/dio_client.dart';
 import 'package:calium_stream/features/home/data/models/anime_model.dart';
 
@@ -51,22 +49,13 @@ class SearchRemoteDataSourceImpl implements SearchRemoteDataSource {
       if (query.trim().isNotEmpty) {
         try {
           final response = await _dioClient.get(
-            '${ApiConstants.aniziumApiBaseUrl}/page/search',
+            '/api/anizium/search',
             queryParameters: {
-              'value': query.trim(),
+              'q': query.trim(),
               'page': page,
             },
           );
           return _parseAnimeList(response.data);
-        } on ServerException catch (e) {
-          if (e.message.contains('502') ||
-              e.message.contains('400') ||
-              e.message.contains('500') ||
-              e.message.contains('boş') ||
-              e.message.contains('bulunamadı')) {
-            return [];
-          }
-          return [];
         } catch (_) {
           return [];
         }
@@ -75,21 +64,14 @@ class SearchRemoteDataSourceImpl implements SearchRemoteDataSource {
       if (genreId != null && genreId.isNotEmpty) {
         try {
           final response = await _dioClient.get(
-            '${ApiConstants.aniziumApiBaseUrl}/page/catalog',
+            '/api/anizium/catalog',
             queryParameters: {
+              'kind': 'genre',
               'id': genreId,
-              'type': 'genre',
               'page': page,
             },
           );
           return _parseAnimeList(response.data);
-        } on ServerException catch (e) {
-          if (e.message.contains('502') ||
-              e.message.contains('400') ||
-              e.message.contains('500')) {
-            return [];
-          }
-          return [];
         } catch (_) {
           return [];
         }
@@ -97,23 +79,14 @@ class SearchRemoteDataSourceImpl implements SearchRemoteDataSource {
 
       if (type != null && type.isNotEmpty) {
         try {
-          final typeParam = type == 'trdub' ? 'sound_group' : 'type';
           final response = await _dioClient.get(
-            '${ApiConstants.aniziumApiBaseUrl}/page/catalog',
+            '/api/anizium/catalog',
             queryParameters: {
-              'id': type,
-              'type': typeParam,
+              'kind': type,
               'page': page,
             },
           );
           return _parseAnimeList(response.data);
-        } on ServerException catch (e) {
-          if (e.message.contains('502') ||
-              e.message.contains('400') ||
-              e.message.contains('500')) {
-            return [];
-          }
-          return [];
         } catch (_) {
           return [];
         }
@@ -122,9 +95,8 @@ class SearchRemoteDataSourceImpl implements SearchRemoteDataSource {
       // Default: top catalog
       try {
         final response = await _dioClient.get(
-          '${ApiConstants.aniziumApiBaseUrl}/page/top',
+          '/api/anizium/top',
           queryParameters: {
-            'platform': 'favorite',
             'page': page,
           },
         );

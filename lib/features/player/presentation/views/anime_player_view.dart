@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:media_kit/media_kit.dart' hide PlayerState;
 import 'package:media_kit_video/media_kit_video.dart';
@@ -14,13 +16,16 @@ import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
+import 'package:calium_stream/core/widgets/app_status_view.dart';
 import 'package:calium_stream/features/anime_details/domain/entities/episode_entity.dart';
 import 'package:calium_stream/features/anime_details/domain/repositories/anime_detail_repository.dart';
+import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
 import 'package:calium_stream/features/player/domain/entities/video_source_entity.dart';
 import 'package:calium_stream/features/player/domain/repositories/player_repository.dart';
 import 'package:calium_stream/features/player/domain/usecases/get_intro_song_usecase.dart';
 import 'package:calium_stream/features/player/domain/usecases/get_video_sources_usecase.dart';
 import 'package:calium_stream/features/player/presentation/cubit/player_cubit.dart';
+import 'package:calium_stream/features/player/presentation/playback_recovery.dart';
 import 'package:calium_stream/features/player/presentation/widgets/in_player_episodes_sheet.dart';
 import 'package:calium_stream/features/player/presentation/widgets/intro_song_badge.dart';
 import 'package:calium_stream/features/player/presentation/widgets/player_controls_hud.dart';
@@ -53,15 +58,16 @@ class AnimePlayerView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => PlayerCubit(
-        getVideoSourcesUseCase: GetIt.I<GetVideoSourcesUseCase>(),
-        getIntroSongUseCase: GetIt.I<GetIntroSongUseCase>(),
-      )..loadVideoSources(
-          animeId: animeId,
-          season: seasonNumber,
-          episode: episodeNumber,
-          localFilePath: streamUrl.isNotEmpty ? streamUrl : null,
-        ),
+      create: (_) =>
+          PlayerCubit(
+            getVideoSourcesUseCase: GetIt.I<GetVideoSourcesUseCase>(),
+            getIntroSongUseCase: GetIt.I<GetIntroSongUseCase>(),
+          )..loadVideoSources(
+            animeId: animeId,
+            season: seasonNumber,
+            episode: episodeNumber,
+            localFilePath: streamUrl.isNotEmpty ? streamUrl : null,
+          ),
       child: _AnimePlayerContent(
         animeId: animeId,
         animeTitle: animeTitle,
@@ -123,7 +129,9 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   Timer? _controlsTimer;
 
   Duration _position = Duration.zero;
-  final ValueNotifier<Duration> _positionNotifier = ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<Duration> _positionNotifier = ValueNotifier<Duration>(
+    Duration.zero,
+  );
   Duration _duration = Duration.zero;
   Duration _buffer = Duration.zero;
   bool _isPlaying = false;
@@ -144,6 +152,10 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   int _reconnectAttempts = 0;
   bool _isReconnecting = false;
   Timer? _bufferingWatchdogTimer;
+  final _recovery = PlaybackRecovery();
+  int _playbackGeneration = 0;
+  String? _playbackError;
+  int _lastSavedSecond = -1;
 
   final List<StreamSubscription> _subscriptions = [];
 
@@ -159,7 +171,8 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     _currentSeasonNumber = widget.seasonNumber;
     _currentEpisodeNumber = widget.episodeNumber;
     _currentEpisodeTitle = widget.episodeTitle;
-    _currentEpisodeId = (widget.episodeId.isNotEmpty && !widget.episodeId.contains('_'))
+    _currentEpisodeId =
+        (widget.episodeId.isNotEmpty && !widget.episodeId.contains('_'))
         ? widget.episodeId
         : '';
 
@@ -172,7 +185,9 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         final epNum = int.tryParse(saved['episodeNumber']?.toString() ?? '');
         if (sNum == _currentSeasonNumber && epNum == _currentEpisodeNumber) {
           final savedEpId = saved['episodeId']?.toString() ?? '';
-          if (_currentEpisodeId.isEmpty && savedEpId.isNotEmpty && !savedEpId.contains('_')) {
+          if (_currentEpisodeId.isEmpty &&
+              savedEpId.isNotEmpty &&
+              !savedEpId.contains('_')) {
             _currentEpisodeId = savedEpId;
           }
 
@@ -181,14 +196,17 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           if (rawPos is num && rawPos > 0) {
             posMs = rawPos.toInt();
           } else {
-            final rawSec = saved['currentTime'] ??
+            final rawSec =
+                saved['currentTime'] ??
                 saved['current_time'] ??
                 saved['time'] ??
                 saved['position'] ??
                 saved['watchedTime'] ??
                 saved['watched_time'];
             if (rawSec is num && rawSec > 0) {
-              posMs = rawSec > 100000 ? rawSec.toInt() : (rawSec * 1000).round();
+              posMs = rawSec > 100000
+                  ? rawSec.toInt()
+                  : (rawSec * 1000).round();
             }
           }
 
@@ -227,13 +245,17 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
 
     _subscriptions.addAll([
       _player.stream.position.listen((pos) {
+        if (!mounted || _currentStreamUrl.isEmpty || _playbackError != null) {
+          return;
+        }
         _position = pos;
         _positionNotifier.value = pos;
 
         // If we have an active initial resume target:
         if (_initialResumeTarget != null) {
           final target = _initialResumeTarget!;
-          if (_duration > Duration.zero && pos.inSeconds < target.inSeconds - 3) {
+          if (_duration > Duration.zero &&
+              pos.inSeconds < target.inSeconds - 3) {
             // Codec reset to 0:00 (due to Android surface resize / decoder reload), re-seek!
             _player.seek(target);
           } else if (pos >= target - const Duration(seconds: 2)) {
@@ -246,16 +268,24 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         }
 
         // Save progress every 5s if user is not in initial resume loading phase
-        if (_initialResumeTarget == null && pos.inSeconds >= 4 && pos.inSeconds % 5 == 0) {
+        if (_initialResumeTarget == null &&
+            !_isReconnecting &&
+            pos.inSeconds >= 4 &&
+            pos.inSeconds % 5 == 0 &&
+            pos.inSeconds != _lastSavedSecond) {
+          _lastSavedSecond = pos.inSeconds;
           _saveCurrentProgress(pos);
         }
       }),
       _player.stream.duration.listen((dur) {
+        if (_currentStreamUrl.isEmpty) return;
         if (mounted) setState(() => _duration = dur);
         if (_initialResumeTarget != null && dur > Duration.zero) {
           final target = _initialResumeTarget!;
           if (_position.inSeconds < target.inSeconds - 3) {
-            final clamped = target > dur ? dur - const Duration(seconds: 5) : target;
+            final clamped = target > dur
+                ? dur - const Duration(seconds: 5)
+                : target;
             if (clamped > Duration.zero) {
               _player.seek(clamped);
             }
@@ -283,7 +313,11 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _player.stream.playing.listen((playing) {
         if (mounted) {
           setState(() => _isPlaying = playing);
-          if (!playing && _initialResumeTarget == null && _position.inSeconds >= 4) {
+          if (!playing &&
+              !_isReconnecting &&
+              _currentStreamUrl.isNotEmpty &&
+              _initialResumeTarget == null &&
+              _position.inSeconds >= 4) {
             _saveCurrentProgress(_position);
           }
         }
@@ -293,7 +327,8 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         setState(() => _isBuffering = buffering);
 
         if (buffering) {
-          if (_isPlaying &&
+          if (!_isReconnecting &&
+              _isPlaying &&
               _currentStreamUrl.isNotEmpty &&
               !_currentStreamUrl.startsWith('/') &&
               !_currentStreamUrl.startsWith('file://')) {
@@ -307,28 +342,36 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         } else {
           _bufferingWatchdogTimer?.cancel();
           _bufferingWatchdogTimer = null;
-          if (_isReconnecting) {
-            setState(() {
-              _isReconnecting = false;
-              _reconnectAttempts = 0;
-            });
-          }
         }
       }),
       _player.stream.error.listen((err) {
-        if (mounted && _currentStreamUrl.isNotEmpty && !_currentStreamUrl.startsWith('/') && !_currentStreamUrl.startsWith('file://')) {
+        if (mounted &&
+            _currentStreamUrl.isNotEmpty &&
+            !_currentStreamUrl.startsWith('/') &&
+            !_currentStreamUrl.startsWith('file://')) {
           _triggerAutoReconnect();
+        } else if (mounted && _currentStreamUrl.isNotEmpty) {
+          setState(
+            () => _playbackError =
+                'İndirilen video oynatılamadı. İndirmelerden yeniden indirin.',
+          );
         }
       }),
       _player.stream.volume.listen((vol) {
         if (mounted) setState(() => _volume = vol);
       }),
       _player.stream.completed.listen((completed) {
-        if (completed && mounted && _autoNextEpisode && !_isDismissedNextEpPrompt) {
+        if (completed &&
+            mounted &&
+            !_isReconnecting &&
+            _currentStreamUrl.isNotEmpty &&
+            _autoNextEpisode &&
+            !_isDismissedNextEpPrompt) {
           final cubitState = context.read<PlayerCubit>().state;
           if (cubitState is PlayerReady) {
             final nextEp = cubitState.sourceData.nextEpisode;
-            final nextSeason = cubitState.sourceData.nextSeason ?? _currentSeasonNumber;
+            final nextSeason =
+                cubitState.sourceData.nextSeason ?? _currentSeasonNumber;
             if (nextEp != null) {
               _switchEpisode(nextSeason, nextEp, 'Bölüm $nextEp');
             }
@@ -339,53 +382,93 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
 
     _loadSeasonEpisodes();
     _resetControlsTimer();
+
+    // If PlayerCubit is already in PlayerReady (e.g. offline local file resolved synchronously)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final cubitState = context.read<PlayerCubit>().state;
+      if (cubitState is PlayerReady && _currentStreamUrl.isEmpty) {
+        _playStream(cubitState.selectedStream.url, cubitState.selectedSubtitle);
+        _fetchIntroSongIfNeeded(context, cubitState);
+      }
+    });
   }
 
   Future<void> _triggerAutoReconnect() async {
-    if (!mounted || _isReconnecting || _currentStreamUrl.isEmpty) return;
-    if (_reconnectAttempts >= 3) {
-      if (mounted) {
-        setState(() {
-          _isReconnecting = false;
-          _isBuffering = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Yayın bağlantısı koptu. Lütfen internetinizi kontrol edip tekrar deneyin.'),
-            backgroundColor: AppColors.accentCrimson,
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: 'Tekrar Dene',
-              textColor: Colors.white,
-              onPressed: () {
-                setState(() => _reconnectAttempts = 0);
-                _triggerAutoReconnect();
-              },
-            ),
-          ),
-        );
-      }
+    if (!mounted ||
+        _recovery.isRunning ||
+        _playbackError != null ||
+        _currentStreamUrl.isEmpty ||
+        _currentStreamUrl.startsWith('/') ||
+        _currentStreamUrl.startsWith('file:')) {
       return;
     }
-
-    _reconnectAttempts++;
-    setState(() => _isReconnecting = true);
-
+    final generation = _playbackGeneration;
     final savedPos = _position;
-    await _player.stop();
-    await Future.delayed(const Duration(milliseconds: 600));
-
-    if (mounted) {
-      _initialResumeTarget = savedPos;
-      final cubitState = context.read<PlayerCubit>().state;
-      if (cubitState is PlayerReady) {
-        _playStream(cubitState.selectedStream.url, cubitState.selectedSubtitle);
+    final state = context.read<PlayerCubit>().state;
+    if (state is! PlayerReady) return;
+    _bufferingWatchdogTimer?.cancel();
+    _autoNextTimer?.cancel();
+    _autoNextTimer = null;
+    _cancelInitialResume();
+    setState(() => _isReconnecting = true);
+    final recovered = await _recovery.run((attempt) async {
+      if (!mounted || generation != _playbackGeneration) return false;
+      setState(() => _reconnectAttempts = attempt);
+      _cancelInitialResume();
+      await _player.stop();
+      if (!mounted || generation != _playbackGeneration) return false;
+      await _playStream(
+        state.selectedStream.url,
+        state.selectedSubtitle,
+        force: true,
+        resumeAt: savedPos,
+      );
+      if (!mounted || generation != _playbackGeneration) return false;
+      // stop()/open() emit buffering=false too. Only advancing playback is success.
+      await _player.stream.position
+          .where(
+            (position) =>
+                _isPlaying &&
+                !_isBuffering &&
+                position > savedPos + const Duration(milliseconds: 500),
+          )
+          .timeout(const Duration(seconds: 10))
+          .first;
+      return mounted && generation == _playbackGeneration;
+    });
+    if (!mounted || generation != _playbackGeneration) return;
+    _cancelInitialResume();
+    setState(() {
+      _isReconnecting = false;
+      _isBuffering = false;
+      _playbackError = recovered ? null : 'Yayın bağlantısı kurulamadı. Bağlantınızı kontrol edip yeniden deneyin.';
+      if (!recovered) {
+        _position = savedPos;
+        _positionNotifier.value = savedPos;
       }
-    }
+    });
+  }
+
+  void _retryPlayback() {
+    _recovery.cancel();
+    _playbackGeneration++;
+    _bufferingWatchdogTimer?.cancel();
+    _initialSeekMs = _position.inMilliseconds;
+    setState(() {
+      _playbackError = null;
+      _isReconnecting = false;
+      _currentStreamUrl = '';
+    });
+    context.read<PlayerCubit>().loadVideoSources(
+      animeId: widget.animeId,
+      season: _currentSeasonNumber,
+      episode: _currentEpisodeNumber,
+    );
   }
 
   void _saveCurrentProgress(Duration pos) {
-    if (pos.inSeconds < 4) return;
+    if (pos.inSeconds < 4 || _duration <= Duration.zero) return;
     String episodeThumb = '';
     String resolvedEpId = _currentEpisodeId;
     try {
@@ -410,7 +493,10 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
           final epNum = int.tryParse(saved['episodeNumber']?.toString() ?? '');
           final sId = saved['episodeId']?.toString() ?? '';
-          if (sNum == _currentSeasonNumber && epNum == _currentEpisodeNumber && sId.isNotEmpty && !sId.contains('_')) {
+          if (sNum == _currentSeasonNumber &&
+              epNum == _currentEpisodeNumber &&
+              sId.isNotEmpty &&
+              !sId.contains('_')) {
             resolvedEpId = sId;
             _currentEpisodeId = sId;
           }
@@ -450,42 +536,93 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   }
 
   Future<void> _loadSeasonEpisodes() async {
+    final season = _currentSeasonNumber;
     try {
       final res = await GetIt.I<AnimeDetailRepository>().getEpisodes(
         animeId: widget.animeId,
-        season: _currentSeasonNumber,
+        season: season,
       );
-      res.fold(
-        (_) => null,
-        (eps) {
-          if (mounted) {
-            setState(() {
-              _seasonEpisodes = eps;
-              for (final ep in eps) {
-                if (ep.seasonNumber == _currentSeasonNumber &&
-                    ep.episodeNumber == _currentEpisodeNumber) {
-                  if (ep.id.isNotEmpty && !ep.id.contains('_')) {
-                    _currentEpisodeId = ep.id;
-                  }
-                  break;
+      if (!mounted || season != _currentSeasonNumber) return;
+      res.fold((_) => _fallbackToDownloadedEpisodes(), (eps) {
+        if (mounted) {
+          setState(() {
+            _seasonEpisodes = eps;
+            for (final ep in eps) {
+              if (ep.seasonNumber == _currentSeasonNumber &&
+                  ep.episodeNumber == _currentEpisodeNumber) {
+                if (ep.id.isNotEmpty && !ep.id.contains('_')) {
+                  _currentEpisodeId = ep.id;
                 }
+                break;
               }
-            });
-          }
-        },
-      );
-    } catch (_) {}
+            }
+          });
+        }
+      });
+    } catch (_) {
+      if (mounted && season == _currentSeasonNumber) {
+        _fallbackToDownloadedEpisodes();
+      }
+    }
   }
 
-  Future<void> _playStream(String url, SubtitleTrackEntity? subtitle) async {
-    if (url.isEmpty || url == _currentStreamUrl) return;
+  void _fallbackToDownloadedEpisodes() {
+    if (!mounted) return;
+    final downloaded = DownloadService.instance.currentTasks
+        .where(
+          (t) =>
+              t.animeId == widget.animeId &&
+              t.seasonNumber == _currentSeasonNumber &&
+              t.status == DownloadStatus.completed,
+        )
+        .toList();
+    if (downloaded.isNotEmpty) {
+      downloaded.sort((a, b) => a.episodeNumber.compareTo(b.episodeNumber));
+      final syntheticEps = downloaded.map((t) {
+        return EpisodeEntity(
+          id: t.id,
+          animeId: widget.animeId,
+          episodeNumber: t.episodeNumber,
+          seasonNumber: t.seasonNumber,
+          title: t.episodeTitle,
+          thumbnailUrl: t.localPosterPath.isNotEmpty
+              ? t.localPosterPath
+              : t.posterUrl,
+        );
+      }).toList();
+      setState(() {
+        _seasonEpisodes = syntheticEps;
+      });
+    } else {
+      setState(() => _seasonEpisodes = []);
+    }
+  }
+
+  Future<void> _playStream(
+    String url,
+    SubtitleTrackEntity? subtitle, {
+    bool force = false,
+    Duration? resumeAt,
+  }) async {
+    if (!mounted || url.isEmpty || (!force && url == _currentStreamUrl)) return;
+    if (!force) {
+      _recovery.cancel();
+      _playbackGeneration++;
+      _bufferingWatchdogTimer?.cancel();
+      _isReconnecting = false;
+      _playbackError = null;
+    }
+    final generation = _playbackGeneration;
     final lastPos = _position;
     _currentStreamUrl = url;
     _introSkipped = false;
 
     // Determine the target seek position
     Duration? seekTarget;
-    if (lastPos.inSeconds > 5) {
+    if (resumeAt != null) {
+      seekTarget = resumeAt;
+      _initialResumeTarget = resumeAt;
+    } else if (lastPos.inSeconds > 5) {
       seekTarget = lastPos;
       _initialResumeTarget = lastPos;
     } else if (_initialSeekMs > 3000) {
@@ -497,7 +634,9 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     }
 
     final isLocal = url.startsWith('/') || url.startsWith('file://');
-    final cleanPath = url.startsWith('file://') ? url.replaceFirst('file://', '') : url;
+    final cleanPath = url.startsWith('file://')
+        ? Uri.parse(url).toFilePath()
+        : url;
 
     // Safety validation for local offline file
     if (isLocal) {
@@ -505,17 +644,8 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       if (!file.existsSync() || file.lengthSync() < 100 * 1024) {
         debugPrint('⚠️ Local file missing or corrupt: $cleanPath');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('İndirilen dosya bulunamadı veya bozuk. Çevrimiçi kaynağa geçiliyor...'),
-              backgroundColor: AppColors.accentCrimson,
-            ),
-          );
-          // Fallback to online sources
-          context.read<PlayerCubit>().loadVideoSources(
-            animeId: widget.animeId,
-            season: _currentSeasonNumber,
-            episode: _currentEpisodeNumber,
+          setState(
+            () => _playbackError = 'İndirilen dosya bulunamadı veya eksik. İndirmelerden yeniden indirin.',
           );
         }
         return;
@@ -536,22 +666,38 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
             start: seekTarget,
           );
 
-    await _player.open(media, play: true);
-    await _player.play();
+    try {
+      await _player.open(media, play: true);
+      if (!mounted || generation != _playbackGeneration) return;
+      await _player.setRate(_currentPlaybackSpeed);
+      if (!mounted || generation != _playbackGeneration) return;
 
-    if (subtitle != null && subtitle.url.isNotEmpty) {
-      await _player.setSubtitleTrack(
-        SubtitleTrack.uri(
-          subtitle.url,
-          title: subtitle.name,
-          language: subtitle.group,
-        ),
-      );
-    }
+      if (subtitle != null && subtitle.url.isNotEmpty) {
+        await _player.setSubtitleTrack(
+          SubtitleTrack.uri(
+            subtitle.url,
+            title: subtitle.name,
+            language: subtitle.group,
+          ),
+        );
+      }
+      if (!mounted || generation != _playbackGeneration) return;
 
-    // Explicit seek after subtitle setup & media open
-    if (seekTarget != null && seekTarget.inMilliseconds > 3000) {
-      await _player.seek(seekTarget);
+      // Explicit seek after subtitle setup & media open
+      if (seekTarget != null && seekTarget.inMilliseconds > 3000) {
+        await _player.seek(seekTarget);
+      }
+    } catch (_) {
+      if (!mounted || generation != _playbackGeneration) return;
+      if (force) rethrow;
+      if (isLocal) {
+        setState(
+          () => _playbackError =
+              'İndirilen video oynatılamadı. İndirmelerden yeniden indirin.',
+        );
+      } else {
+        await _triggerAutoReconnect();
+      }
     }
   }
 
@@ -579,13 +725,23 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     setState(() => _isDismissedNextEpPrompt = true);
   }
 
-  void _switchEpisode(int season, int episode, String? title, {String? episodeId}) {
+  Future<void> _switchEpisode(
+    int season,
+    int episode,
+    String? title, {
+    String? episodeId,
+  }) async {
+    _saveCurrentProgress(_position);
+    _recovery.cancel();
+    final generation = ++_playbackGeneration;
+    _bufferingWatchdogTimer?.cancel();
     _autoNextTimer?.cancel();
     _autoNextTimer = null;
 
     int savedSeekMs = 0;
     double savedProgress = 0.0;
-    String targetEpId = (episodeId != null && episodeId.isNotEmpty && !episodeId.contains('_'))
+    String targetEpId =
+        (episodeId != null && episodeId.isNotEmpty && !episodeId.contains('_'))
         ? episodeId
         : '';
 
@@ -607,14 +763,17 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           if (rawPos is num && rawPos > 0) {
             posMs = rawPos.toInt();
           } else {
-            final rawSec = saved['currentTime'] ??
+            final rawSec =
+                saved['currentTime'] ??
                 saved['current_time'] ??
                 saved['time'] ??
                 saved['position'] ??
                 saved['watchedTime'] ??
                 saved['watched_time'];
             if (rawSec is num && rawSec > 0) {
-              posMs = rawSec > 100000 ? rawSec.toInt() : (rawSec * 1000).round();
+              posMs = rawSec > 100000
+                  ? rawSec.toInt()
+                  : (rawSec * 1000).round();
             }
           }
 
@@ -649,6 +808,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     }
 
     setState(() {
+      if (_currentSeasonNumber != season) _seasonEpisodes = [];
       _currentSeasonNumber = season;
       _currentEpisodeNumber = episode;
       _currentEpisodeTitle = title ?? 'Bölüm $episode';
@@ -661,12 +821,17 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _showControls = true;
       _initialSeekMs = savedSeekMs;
       _savedProgressRatio = savedProgress;
-      _initialResumeTarget = savedSeekMs > 3000 ? Duration(milliseconds: savedSeekMs) : null;
+      _initialResumeTarget = savedSeekMs > 3000
+          ? Duration(milliseconds: savedSeekMs)
+          : null;
       _introSkipped = false;
       _isDismissedIntroSong = false;
       _isIntroSongFadingOut = false;
       _lastIntroSongEpisodeKey = '';
       _hasScrobbledCurrentEpisode = false;
+      _isReconnecting = false;
+      _playbackError = null;
+      _lastSavedSecond = -1;
     });
 
     _introSongFadeTimer?.cancel();
@@ -678,19 +843,21 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       });
     }
 
-    _player.stop();
+    await _player.stop();
+    if (!mounted || generation != _playbackGeneration) return;
     _loadSeasonEpisodes();
     _resetControlsTimer();
 
     context.read<PlayerCubit>().loadVideoSources(
-          animeId: widget.animeId,
-          season: season,
-          episode: episode,
-        );
+      animeId: widget.animeId,
+      season: season,
+      episode: episode,
+    );
   }
 
   void _fetchIntroSongIfNeeded(BuildContext context, PlayerReady state) {
-    final epKey = '${widget.animeId}_${_currentSeasonNumber}_$_currentEpisodeNumber';
+    final epKey =
+        '${widget.animeId}_${_currentSeasonNumber}_$_currentEpisodeNumber';
     if (_lastIntroSongEpisodeKey == epKey) return;
     _lastIntroSongEpisodeKey = epKey;
 
@@ -699,14 +866,14 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         : _currentEpisodeNumber.toString();
 
     context.read<PlayerCubit>().loadIntroSong(
-          animeId: widget.animeId,
-          episodeId: resolvedEpId,
-          animeName: widget.animeTitle,
-          season: _currentSeasonNumber,
-          episode: _currentEpisodeNumber,
-          introStart: state.sourceData.introStart,
-          streamUrl: state.selectedStream.url,
-        );
+      animeId: widget.animeId,
+      episodeId: resolvedEpId,
+      animeName: widget.animeTitle,
+      season: _currentSeasonNumber,
+      episode: _currentEpisodeNumber,
+      introStart: state.sourceData.introStart,
+      streamUrl: state.selectedStream.url,
+    );
   }
 
   void _toggleControls() {
@@ -760,7 +927,11 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
               await _player.setSubtitleTrack(SubtitleTrack.no());
             } else {
               await _player.setSubtitleTrack(
-                SubtitleTrack.uri(sub.url, title: sub.name, language: sub.group),
+                SubtitleTrack.uri(
+                  sub.url,
+                  title: sub.name,
+                  language: sub.group,
+                ),
               );
             }
           },
@@ -797,7 +968,12 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           currentEpisodeNumber: _currentEpisodeNumber,
           currentSeasonNumber: _currentSeasonNumber,
           onEpisodeSelected: (ep) {
-            _switchEpisode(ep.seasonNumber, ep.episodeNumber, ep.title, episodeId: ep.id);
+            _switchEpisode(
+              ep.seasonNumber,
+              ep.episodeNumber,
+              ep.title,
+              episodeId: ep.id,
+            );
           },
         );
       },
@@ -806,6 +982,9 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
 
   @override
   void dispose() {
+    _recovery.cancel();
+    _playbackGeneration++;
+    _resumeSafetyTimer?.cancel();
     _saveCurrentProgress(_position);
     try {
       GetIt.I<SyncService>().syncNow();
@@ -893,466 +1072,668 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                 _fetchIntroSongIfNeeded(context, state);
               }
             },
-        builder: (context, state) {
-          if (state is PlayerLoading || state is PlayerInitial) {
-            return const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: AppColors.primary),
-                  SizedBox(height: 16),
-                  Text(
-                    'Bölüm kaynakları çözümleniyor...',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          if (state is PlayerError) {
-            final isOffline = state.message.contains('SocketException') ||
-                state.message.contains('Failed host lookup') ||
-                state.message.contains('anizium') ||
-                state.message.contains('HandshakeException');
-            final cleanMessage = isOffline
-                ? 'İnternet bağlantısı yok veya bölüm kaynağına ulaşılamadı.\nÇevrimdışı izlemek için bölümü önceden indirmiş olmanız gerekir.'
-                : state.message;
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.wifi_off_rounded,
-                        color: AppColors.accentCrimson, size: 48),
-                    const SizedBox(height: 12),
-                    Text('Video Yüklenemedi', style: AppTypography.headlineMedium.copyWith(fontSize: 18)),
-                    const SizedBox(height: 8),
-                    Text(
-                      cleanMessage,
-                      style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Geri Dön'),
-                        ),
-                        const SizedBox(width: 12),
-                        ElevatedButton(
-                          onPressed: () {
-                            context.read<PlayerCubit>().loadVideoSources(
-                                  animeId: widget.animeId,
-                                  season: _currentSeasonNumber,
-                                  episode: _currentEpisodeNumber,
-                                );
-                          },
-                          child: const Text('Tekrar Dene'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          if (state is PlayerReady) {
-            final isCover = state.isFitCover;
-            final introStart = state.sourceData.introStart;
-            final introEnd = state.sourceData.introEnd;
-            final nextEp = state.sourceData.nextEpisode;
-            final nextSeason = state.sourceData.nextSeason ?? _currentSeasonNumber;
-
-            return Stack(
-              children: [
-                // 1. Video Surface with Gesture Detection & RepaintBoundary
-                Positioned.fill(
-                  child: PlayerGestureDetector(
-                    currentPosition: _position,
-                    totalDuration: _duration,
-                    isLocked: _isLocked,
-                    initialBrightness: _brightness,
-                    initialVolume: _volume,
-                    onTap: _toggleControls,
-                    onDoubleTapLeft: (seconds) {
-                      _cancelInitialResume();
-                      _player.seek(_position - Duration(seconds: seconds));
-                      _resetControlsTimer();
-                    },
-                    onDoubleTapRight: (seconds) {
-                      _cancelInitialResume();
-                      _player.seek(_position + Duration(seconds: seconds));
-                      _resetControlsTimer();
-                    },
-                    onDoubleTapCenter: () {
-                      _player.playOrPause();
-                      _resetControlsTimer();
-                    },
-                    onLongPressStart: () {
-                      _player.setRate(2.0);
-                    },
-                    onLongPressEnd: () {
-                      _player.setRate(_currentPlaybackSpeed);
-                    },
-                    onBrightnessChanged: (val) {
-                      setState(() => _brightness = val);
-                    },
-                    onVolumeChanged: (val) {
-                      _player.setVolume(val);
-                      setState(() => _volume = val);
-                    },
-                    child: Center(
-                      child: RepaintBoundary(
-                        child: Video(
-                          controller: _videoController,
-                          controls: NoVideoControls,
-                          fit: isCover ? BoxFit.cover : BoxFit.contain,
-                          subtitleViewConfiguration: SubtitleViewConfiguration(
-                            style: TextStyle(
-                              height: 1.35,
-                              fontSize: _subtitleSize.toDouble(),
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              backgroundColor: const Color(0xbb000000),
-                            ),
-                            textAlign: TextAlign.center,
-                            padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                          ),
-                        ),
+            builder: (context, state) {
+              if (state is PlayerLoading || state is PlayerInitial) {
+                return const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: AppColors.primary),
+                      SizedBox(height: 16),
+                      Text(
+                        'Bölüm kaynakları çözümleniyor...',
+                        style: TextStyle(color: Colors.white70),
                       ),
-                    ),
+                    ],
                   ),
-                ),
+                );
+              }
 
-                // 2. Hardware/Custom Brightness Dimmer Overlay
-                if (_brightness < 1.0)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        color: Colors.black.withValues(alpha: (1.0 - _brightness) * 0.85),
-                      ),
-                    ),
-                  ),
+              if (state is PlayerError) {
+                final isOffline = state.isNetwork;
+                final hasCompletedDownloads = DownloadService
+                    .instance
+                    .currentTasks
+                    .any((t) => t.status == DownloadStatus.completed);
 
-                // 3. Buffering / Auto-Reconnecting Indicator
-                if (_isReconnecting)
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withAlpha(220),
-                        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
-                        border: Border.all(color: AppColors.primary, width: 1.2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withAlpha(80),
-                            blurRadius: 16,
-                          ),
-                        ],
-                      ),
-                      child: Row(
+                return Center(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                      child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: AppColors.primary.withAlpha(80),
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withAlpha(40),
+                                  blurRadius: 20,
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              isOffline
+                                  ? Icons.wifi_off_rounded
+                                  : Icons.error_outline_rounded,
+                              color: isOffline
+                                  ? AppColors.primary
+                                  : AppColors.accentCrimson,
+                              size: 40,
+                            ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(height: 16),
                           Text(
-                            'Yeniden bağlanılıyor... ($_reconnectAttempts/3)',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            isOffline
+                                ? 'İnternet Bağlantısı Yok'
+                                : 'Video Yüklenemedi',
+                            style: AppTypography.headlineMedium.copyWith(
+                              fontSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            isOffline
+                                ? (hasCompletedDownloads
+                                      ? 'Bu bölüm henüz indirilmemiş. Önceden indirdiğiniz bölümleri çevrimdışı izleyebilirsiniz.'
+                                      : 'İnternet bağlantısı kurulamadı. Çevrimdışı izlemek için bölümleri önceden indirmiş olmanız gerekir.')
+                                : state.message,
+                            style: AppTypography.bodySmall.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  side: const BorderSide(
+                                    color: AppColors.border,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  if (context.canPop()) {
+                                    context.pop();
+                                  } else {
+                                    context.go('/');
+                                  }
+                                },
+                                child: const Text('Geri Dön'),
+                              ),
+                              if (hasCompletedDownloads)
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    foregroundColor: Colors.black,
+                                  ),
+                                  onPressed: () => context.push('/downloads'),
+                                  icon: const Icon(
+                                    Icons.download_for_offline_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text(
+                                    'İndirilenleri İzle',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.black,
+                                ),
+                                onPressed: _retryPlayback,
+                                child: const Text(
+                                  'Tekrar Dene',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                  )
-                else if (_isBuffering)
-                  const Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
                   ),
+                );
+              }
 
-                // 4. Intro Song Badge (Bottom-Left)
-                if (state.introSong != null &&
-                    !_isDismissedIntroSong &&
-                    introStart != null &&
-                    introEnd != null)
-                  ValueListenableBuilder<Duration>(
-                    valueListenable: _positionNotifier,
-                    builder: (context, pos, _) {
-                      final currentSec = pos.inSeconds;
-                      final isInsideIntro = currentSec >= introStart && currentSec < introEnd;
-                      final isNearAfterIntro = currentSec >= introEnd && currentSec < introEnd + 4;
+              if (state is PlayerReady) {
+                final isCover = state.isFitCover;
+                final introStart = state.sourceData.introStart;
+                final introEnd = state.sourceData.introEnd;
+                final nextEp = state.sourceData.nextEpisode;
+                final nextSeason =
+                    state.sourceData.nextSeason ?? _currentSeasonNumber;
 
-                      if (isInsideIntro) {
-                        if (_isIntroSongFadingOut) {
-                          _introSongFadeTimer?.cancel();
-                          _introSongFadeTimer = null;
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) setState(() => _isIntroSongFadingOut = false);
-                          });
-                        }
-                      } else if (isNearAfterIntro) {
-                        if (!_isIntroSongFadingOut && _introSongFadeTimer == null) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) {
-                              setState(() => _isIntroSongFadingOut = true);
-                              _introSongFadeTimer = Timer(const Duration(milliseconds: 3000), () {
-                                if (mounted) {
-                                  setState(() => _isIntroSongFadingOut = false);
-                                }
-                              });
-                            }
-                          });
-                        }
-                      }
-
-                      final shouldShow = isInsideIntro || (isNearAfterIntro && _isIntroSongFadingOut);
-                      if (!shouldShow) return const SizedBox.shrink();
-
-                      return Positioned(
-                        bottom: _showControls ? 85 : 28,
-                        left: 32,
-                        child: IntroSongBadge(
-                          song: state.introSong!,
-                          isVisible: isInsideIntro,
-                          isFadingOut: !isInsideIntro,
-                          onDismissed: () {
-                            setState(() => _isDismissedIntroSong = true);
-                          },
+                return Stack(
+                  children: [
+                    // 1. Video Surface with Gesture Detection & RepaintBoundary
+                    Positioned.fill(
+                      child: PlayerGestureDetector(
+                        currentPosition: _position,
+                        totalDuration: _duration,
+                        isLocked: _isLocked,
+                        initialBrightness: _brightness,
+                        initialVolume: _volume,
+                        onTap: _toggleControls,
+                        onDoubleTapLeft: (seconds) {
+                          _cancelInitialResume();
+                          _player.seek(_position - Duration(seconds: seconds));
+                          _resetControlsTimer();
+                        },
+                        onDoubleTapRight: (seconds) {
+                          _cancelInitialResume();
+                          _player.seek(_position + Duration(seconds: seconds));
+                          _resetControlsTimer();
+                        },
+                        onDoubleTapCenter: () {
+                          _player.playOrPause();
+                          _resetControlsTimer();
+                        },
+                        onLongPressStart: () {
+                          _player.setRate(2.0);
+                        },
+                        onLongPressEnd: () {
+                          _player.setRate(_currentPlaybackSpeed);
+                        },
+                        onBrightnessChanged: (val) {
+                          setState(() => _brightness = val);
+                        },
+                        onVolumeChanged: (val) {
+                          _player.setVolume(val);
+                          setState(() => _volume = val);
+                        },
+                        child: Center(
+                          child: RepaintBoundary(
+                            child: Video(
+                              controller: _videoController,
+                              controls: NoVideoControls,
+                              fit: isCover ? BoxFit.cover : BoxFit.contain,
+                              subtitleViewConfiguration:
+                                  SubtitleViewConfiguration(
+                                    style: TextStyle(
+                                      height: 1.35,
+                                      fontSize: _subtitleSize.toDouble(),
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      backgroundColor: const Color(0xbb000000),
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      24,
+                                      0,
+                                      24,
+                                      32,
+                                    ),
+                                  ),
+                            ),
+                          ),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    ),
 
-                // 5. Skip Intro Button / Auto Skip Handler
-                if (introStart != null && introEnd != null)
-                  ValueListenableBuilder<Duration>(
-                    valueListenable: _positionNotifier,
-                    builder: (context, pos, _) {
-                      final currentSec = pos.inSeconds;
-
-                      // Auto Skip Intro trigger
-                      if (_autoSkipIntro &&
-                          !_introSkipped &&
-                          currentSec >= introStart &&
-                          currentSec <= introStart + 2) {
-                        _introSkipped = true;
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          _player.seek(Duration(seconds: introEnd));
-                        });
-                      }
-
-                      final isInsideIntro = currentSec >= introStart && currentSec < introEnd;
-                      if (!isInsideIntro || _autoSkipIntro) return const SizedBox.shrink();
-
-                      return Positioned(
-                        bottom: _showControls ? 85 : 28,
-                        right: 32,
-                        child: SkipIntroButton(
-                          isVisible: true,
-                          onPressed: () {
-                            _player.seek(Duration(seconds: introEnd));
-                          },
+                    // 2. Hardware/Custom Brightness Dimmer Overlay
+                    if (_brightness < 1.0)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: Container(
+                            color: Colors.black.withValues(
+                              alpha: (1.0 - _brightness) * 0.85,
+                            ),
+                          ),
                         ),
-                      );
-                    },
-                  ),
+                      ),
 
-                // 5. Next Episode Floating Countdown Card
-                if (nextEp != null && !_isDismissedNextEpPrompt)
-                  ValueListenableBuilder<Duration>(
-                    valueListenable: _positionNotifier,
-                    builder: (context, pos, _) {
-                      final totalSec = _duration.inSeconds;
-                      final currentSec = pos.inSeconds;
-                      final isNearEnd = totalSec > 45 && currentSec >= (totalSec - 45);
-
-                      if (!isNearEnd) return const SizedBox.shrink();
-
-                      // Trigger Auto Next Countdown if enabled
-                      if (_autoNextEpisode && _autoNextTimer == null) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          _startAutoNextCountdown(nextSeason, nextEp);
-                        });
-                      }
-
-                      return Positioned(
-                        bottom: _showControls ? 90 : 32,
-                        right: 32,
+                    // 3. Buffering / Auto-Reconnecting Indicator
+                    if (_isReconnecting)
+                      Center(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withAlpha(220),
-                            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
-                            border: Border.all(color: AppColors.primary, width: 1.2),
+                            borderRadius: BorderRadius.circular(
+                              AppSpacing.borderRadiusMd,
+                            ),
+                            border: Border.all(
+                              color: AppColors.primary,
+                              width: 1.2,
+                            ),
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.primary.withAlpha(100),
-                                blurRadius: 18,
+                                color: AppColors.primary.withAlpha(80),
+                                blurRadius: 16,
                               ),
                             ],
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text(
-                                        'Sonraki Bölüm',
-                                        style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                                      ),
-                                      if (_autoNextEpisode && _autoNextCountdown > 0) ...[
-                                        const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.primary.withAlpha(40),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            '${_autoNextCountdown}s',
-                                            style: const TextStyle(
-                                              color: AppColors.primary,
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  Text(
-                                    'Bölüm $nextEp',
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 14),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.black,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  minimumSize: Size.zero,
-                                ),
-                                onPressed: () {
-                                  _switchEpisode(nextSeason, nextEp, 'Bölüm $nextEp');
-                                },
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.play_arrow_rounded, size: 16),
-                                    SizedBox(width: 2),
-                                    Text('Oynat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                  ],
+                              const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              IconButton(
-                                icon: const Icon(Icons.close_rounded, size: 18, color: Colors.white60),
-                                onPressed: _cancelAutoNextCountdown,
+                              const SizedBox(width: 12),
+                              Text(
+                                'Yeniden bağlanılıyor... ($_reconnectAttempts/3)',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      );
-                    },
-                  ),
+                      )
+                    else if (_isBuffering)
+                      const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primary,
+                        ),
+                      ),
 
-                // 6. HUD Overlay with Soft Fade Animation
-                AnimatedOpacity(
-                  opacity: _showControls ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOutCubic,
-                  child: IgnorePointer(
-                    ignoring: !_showControls,
-                    child: PlayerControlsHUD(
-                      isPlaying: _isPlaying,
-                      position: _position,
-                      positionListenable: _positionNotifier,
-                      duration: _duration,
-                      buffered: _buffer,
-                      animeTitle: widget.animeTitle,
-                      episodeTitle: _currentEpisodeTitle,
-                      selectedQuality: state.selectedStream.quality,
-                      selectedAudioName: state.selectedAudioGroup.name,
-                      selectedSubtitleName: state.selectedSubtitle?.name,
-                      playbackSpeed: state.playbackSpeed,
-                      isFitCover: state.isFitCover,
-                      isLocked: _isLocked,
-                      onBackgroundTap: _toggleControls,
-                      onToggleLock: _toggleLock,
-                      onPlayPause: () {
-                        _player.playOrPause();
-                        _resetControlsTimer();
-                      },
-                      onSeekForward: () {
-                        _cancelInitialResume();
-                        _player.seek(_position + const Duration(seconds: 10));
-                        _resetControlsTimer();
-                      },
-                      onSeekBackward: () {
-                        _cancelInitialResume();
-                        _player.seek(_position - const Duration(seconds: 10));
-                        _resetControlsTimer();
-                      },
-                      onSeek: (val) {
-                        _cancelInitialResume();
-                        _player.seek(val);
-                        _resetControlsTimer();
-                      },
-                      onSeekStart: () {
-                        _cancelInitialResume();
-                        _controlsTimer?.cancel();
-                      },
-                      onSeekEnd: () {
-                        _resetControlsTimer();
-                      },
-                      onBack: () => Navigator.of(context).pop(),
-                      onOpenAudioModal: () => _openSettingsSheet(state),
-                      onOpenQualityModal: () => _openSettingsSheet(state),
-                      onOpenSubtitleModal: () => _openSettingsSheet(state),
-                      onOpenSpeedModal: () => _openSettingsSheet(state),
-                      onOpenEpisodesModal: _openEpisodesSheet,
-                      onToggleAspectRatio: () {
-                        context.read<PlayerCubit>().toggleFitCover();
-                      },
-                      onPreviousEpisode: _currentEpisodeNumber > 1
-                          ? () => _switchEpisode(
-                                _currentSeasonNumber,
-                                _currentEpisodeNumber - 1,
-                                'Bölüm ${_currentEpisodeNumber - 1}',
-                              )
-                          : null,
-                      onNextEpisode: nextEp != null
-                          ? () => _switchEpisode(
-                                nextSeason,
-                                nextEp,
-                                'Bölüm $nextEp',
-                              )
-                          : null,
+                    // 4. Intro Song Badge (Bottom-Left)
+                    if (state.introSong != null &&
+                        !_isDismissedIntroSong &&
+                        introStart != null &&
+                        introEnd != null)
+                      ValueListenableBuilder<Duration>(
+                        valueListenable: _positionNotifier,
+                        builder: (context, pos, _) {
+                          final currentSec = pos.inSeconds;
+                          final isInsideIntro =
+                              currentSec >= introStart && currentSec < introEnd;
+                          final isNearAfterIntro =
+                              currentSec >= introEnd &&
+                              currentSec < introEnd + 4;
+
+                          if (isInsideIntro) {
+                            if (_isIntroSongFadingOut) {
+                              _introSongFadeTimer?.cancel();
+                              _introSongFadeTimer = null;
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) {
+                                  setState(() => _isIntroSongFadingOut = false);
+                                }
+                              });
+                            }
+                          } else if (isNearAfterIntro) {
+                            if (!_isIntroSongFadingOut &&
+                                _introSongFadeTimer == null) {
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) {
+                                  setState(() => _isIntroSongFadingOut = true);
+                                  _introSongFadeTimer = Timer(
+                                    const Duration(milliseconds: 3000),
+                                    () {
+                                      if (mounted) {
+                                        setState(
+                                          () => _isIntroSongFadingOut = false,
+                                        );
+                                      }
+                                    },
+                                  );
+                                }
+                              });
+                            }
+                          }
+
+                          final shouldShow =
+                              isInsideIntro ||
+                              (isNearAfterIntro && _isIntroSongFadingOut);
+                          if (!shouldShow) return const SizedBox.shrink();
+
+                          return Positioned(
+                            bottom: _showControls ? 85 : 28,
+                            left: 32,
+                            child: IntroSongBadge(
+                              song: state.introSong!,
+                              isVisible: isInsideIntro,
+                              isFadingOut: !isInsideIntro,
+                              onDismissed: () {
+                                setState(() => _isDismissedIntroSong = true);
+                              },
+                            ),
+                          );
+                        },
+                      ),
+
+                    // 5. Skip Intro Button / Auto Skip Handler
+                    if (introStart != null && introEnd != null)
+                      ValueListenableBuilder<Duration>(
+                        valueListenable: _positionNotifier,
+                        builder: (context, pos, _) {
+                          final currentSec = pos.inSeconds;
+
+                          // Auto Skip Intro trigger
+                          if (_autoSkipIntro &&
+                              !_introSkipped &&
+                              currentSec >= introStart &&
+                              currentSec <= introStart + 2) {
+                            _introSkipped = true;
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) {
+                                _player.seek(Duration(seconds: introEnd));
+                              }
+                            });
+                          }
+
+                          final isInsideIntro =
+                              currentSec >= introStart && currentSec < introEnd;
+                          if (!isInsideIntro || _autoSkipIntro) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return Positioned(
+                            bottom: _showControls ? 85 : 28,
+                            right: 32,
+                            child: SkipIntroButton(
+                              isVisible: true,
+                              onPressed: () {
+                                _player.seek(Duration(seconds: introEnd));
+                              },
+                            ),
+                          );
+                        },
+                      ),
+
+                    // 5. Next Episode Floating Countdown Card
+                    if (nextEp != null && !_isDismissedNextEpPrompt)
+                      ValueListenableBuilder<Duration>(
+                        valueListenable: _positionNotifier,
+                        builder: (context, pos, _) {
+                          final totalSec = _duration.inSeconds;
+                          final currentSec = pos.inSeconds;
+                          final isNearEnd =
+                              totalSec > 45 && currentSec >= (totalSec - 45);
+
+                          if (!isNearEnd) return const SizedBox.shrink();
+
+                          // Trigger Auto Next Countdown if enabled
+                          if (_autoNextEpisode &&
+                              !_isReconnecting &&
+                              _playbackError == null &&
+                              _autoNextTimer == null) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _startAutoNextCountdown(nextSeason, nextEp);
+                            });
+                          }
+
+                          return Positioned(
+                            bottom: _showControls ? 90 : 32,
+                            right: 32,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(220),
+                                borderRadius: BorderRadius.circular(
+                                  AppSpacing.borderRadiusMd,
+                                ),
+                                border: Border.all(
+                                  color: AppColors.primary,
+                                  width: 1.2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.primary.withAlpha(100),
+                                    blurRadius: 18,
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text(
+                                            'Sonraki Bölüm',
+                                            style: TextStyle(
+                                              color: AppColors.textSecondary,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                          if (_autoNextEpisode &&
+                                              _autoNextCountdown > 0) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 5,
+                                                    vertical: 1,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primary
+                                                    .withAlpha(40),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                '${_autoNextCountdown}s',
+                                                style: const TextStyle(
+                                                  color: AppColors.primary,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      Text(
+                                        'Bölüm $nextEp',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(width: 14),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primary,
+                                      foregroundColor: Colors.black,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      minimumSize: Size.zero,
+                                    ),
+                                    onPressed: () {
+                                      _switchEpisode(
+                                        nextSeason,
+                                        nextEp,
+                                        'Bölüm $nextEp',
+                                      );
+                                    },
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.play_arrow_rounded,
+                                          size: 16,
+                                        ),
+                                        SizedBox(width: 2),
+                                        Text(
+                                          'Oynat',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 18,
+                                      color: Colors.white60,
+                                    ),
+                                    onPressed: _cancelAutoNextCountdown,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                    // 6. HUD Overlay with Soft Fade Animation
+                    AnimatedOpacity(
+                      opacity: _showControls ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOutCubic,
+                      child: IgnorePointer(
+                        ignoring: !_showControls,
+                        child: PlayerControlsHUD(
+                          isPlaying: _isPlaying,
+                          position: _position,
+                          positionListenable: _positionNotifier,
+                          duration: _duration,
+                          buffered: _buffer,
+                          animeTitle: widget.animeTitle,
+                          episodeTitle: _currentEpisodeTitle,
+                          selectedQuality: state.selectedStream.quality,
+                          selectedAudioName: state.selectedAudioGroup.name,
+                          selectedSubtitleName: state.selectedSubtitle?.name,
+                          playbackSpeed: state.playbackSpeed,
+                          isFitCover: state.isFitCover,
+                          isLocked: _isLocked,
+                          onBackgroundTap: _toggleControls,
+                          onToggleLock: _toggleLock,
+                          onPlayPause: () {
+                            _player.playOrPause();
+                            _resetControlsTimer();
+                          },
+                          onSeekForward: () {
+                            _cancelInitialResume();
+                            _player.seek(
+                              _position + const Duration(seconds: 10),
+                            );
+                            _resetControlsTimer();
+                          },
+                          onSeekBackward: () {
+                            _cancelInitialResume();
+                            _player.seek(
+                              _position - const Duration(seconds: 10),
+                            );
+                            _resetControlsTimer();
+                          },
+                          onSeek: (val) {
+                            _cancelInitialResume();
+                            _player.seek(val);
+                            _resetControlsTimer();
+                          },
+                          onSeekStart: () {
+                            _cancelInitialResume();
+                            _controlsTimer?.cancel();
+                          },
+                          onSeekEnd: () {
+                            _resetControlsTimer();
+                          },
+                          onBack: () {
+                            if (context.canPop()) {
+                              context.pop();
+                            } else {
+                              context.go('/');
+                            }
+                          },
+                          onOpenAudioModal: () => _openSettingsSheet(state),
+                          onOpenQualityModal: () => _openSettingsSheet(state),
+                          onOpenSubtitleModal: () => _openSettingsSheet(state),
+                          onOpenSpeedModal: () => _openSettingsSheet(state),
+                          onOpenEpisodesModal: _openEpisodesSheet,
+                          onToggleAspectRatio: () {
+                            context.read<PlayerCubit>().toggleFitCover();
+                          },
+                          onPreviousEpisode: _currentEpisodeNumber > 1
+                              ? () => _switchEpisode(
+                                  _currentSeasonNumber,
+                                  _currentEpisodeNumber - 1,
+                                  'Bölüm ${_currentEpisodeNumber - 1}',
+                                )
+                              : null,
+                          onNextEpisode: nextEp != null
+                              ? () => _switchEpisode(
+                                  nextSeason,
+                                  nextEp,
+                                  'Bölüm $nextEp',
+                                )
+                              : null,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            );
-          }
+                    if (_playbackError != null)
+                      Positioned.fill(
+                        child: ColoredBox(
+                          color: Colors.black.withAlpha(235),
+                          child: AppStatusView(
+                            title: 'Oynatma durdu',
+                            message: _playbackError!,
+                            icon: Icons.error_outline_rounded,
+                            actions: [
+                              OutlinedButton(
+                                onPressed: () {
+                                  if (context.canPop()) {
+                                    context.pop();
+                                  } else {
+                                    context.go('/');
+                                  }
+                                },
+                                child: const Text('Geri dön'),
+                              ),
+                              OutlinedButton(
+                                onPressed: () => context.push('/downloads'),
+                                child: const Text('İndirmeler'),
+                              ),
+                              FilledButton(
+                                onPressed: _retryPlayback,
+                                child: const Text('Yeniden dene'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              }
 
-          return const SizedBox.shrink();
-        },
-      ),
-      ),
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
       ),
     );
   }

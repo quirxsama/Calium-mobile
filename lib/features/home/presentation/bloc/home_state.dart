@@ -22,6 +22,8 @@ final class HomeLoaded extends HomeState {
     this.isekai = const [],
     this.movies = const [],
     this.continueWatching = const [],
+    this.isRefreshing = false,
+    this.refreshError = '',
   });
 
   final List<AnimeEntity> trending;
@@ -33,26 +35,49 @@ final class HomeLoaded extends HomeState {
   final List<AnimeEntity> isekai;
   final List<AnimeEntity> movies;
   final List<AnimeEntity> continueWatching;
+  final bool isRefreshing;
+  final String refreshError;
+
+  HomeLoaded copyWith({
+    bool? isRefreshing,
+    String? refreshError,
+    List<AnimeEntity>? trending,
+  }) => HomeLoaded(
+    trending: trending ?? this.trending,
+    topAiring: topAiring,
+    seasonal: seasonal,
+    topRanked: topRanked,
+    trDub: trDub,
+    action: action,
+    isekai: isekai,
+    movies: movies,
+    continueWatching: continueWatching,
+    isRefreshing: isRefreshing ?? this.isRefreshing,
+    refreshError: refreshError ?? this.refreshError,
+  );
 
   @override
   List<Object?> get props => [
-        trending,
-        topAiring,
-        seasonal,
-        topRanked,
-        trDub,
-        action,
-        isekai,
-        movies,
-        continueWatching,
-      ];
+    trending,
+    topAiring,
+    seasonal,
+    topRanked,
+    trDub,
+    action,
+    isekai,
+    movies,
+    continueWatching,
+    isRefreshing,
+    refreshError,
+  ];
 }
 
 final class HomeFailureState extends HomeState {
-  const HomeFailureState({required this.errorMessage});
+  const HomeFailureState({required this.errorMessage, this.isNetwork = false});
 
   final String errorMessage;
+  final bool isNetwork;
 
   @override
-  List<Object?> get props => [errorMessage];
+  List<Object?> get props => [errorMessage, isNetwork];
 }

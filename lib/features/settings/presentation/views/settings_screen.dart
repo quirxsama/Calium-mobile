@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +10,7 @@ import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
+import 'package:calium_stream/core/widgets/app_content_frame.dart';
 import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:calium_stream/features/settings/presentation/bloc/settings_bloc.dart';
@@ -67,84 +69,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final authState = context.watch<AuthBloc>().state;
     _initUserData(authState);
 
-    return BlocListener<SettingsBloc, SettingsState>(
-      listener: (context, state) {
-        if (state is SettingsSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: AppColors.successGreen,
-            ),
-          );
-          context.read<AuthBloc>().add(CheckAuthRequested());
-        }
-        if (state is SettingsFailure) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: AppColors.accentCrimson,
-            ),
-          );
-        }
-      },
-      child: DefaultTabController(
-        length: 6,
-        child: Scaffold(
-          backgroundColor: AppColors.background,
-          appBar: AppBar(
+    return AppContentFrame(
+      maxWidth: 960,
+      child: BlocListener<SettingsBloc, SettingsState>(
+        listener: (context, state) {
+          if (state is SettingsSuccess) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: AppColors.successGreen,
+              ),
+            );
+            context.read<AuthBloc>().add(CheckAuthRequested());
+          }
+          if (state is SettingsFailure) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: AppColors.accentCrimson,
+              ),
+            );
+          }
+        },
+        child: DefaultTabController(
+          length: 6,
+          child: Scaffold(
             backgroundColor: AppColors.background,
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            title: Text(
-              'Ayarlar & Profil',
-              style: AppTypography.headlineMedium.copyWith(fontWeight: FontWeight.w800),
-            ),
-            bottom: const TabBar(
-              isScrollable: true,
-              indicatorColor: AppColors.primary,
-              labelColor: AppColors.primary,
-              unselectedLabelColor: AppColors.textSecondary,
-              tabs: [
-                Tab(text: 'Profil'),
-                Tab(text: 'Gizlilik'),
-                Tab(text: 'Oynatıcı'),
-                Tab(text: 'Bağlantılar (AniList & MAL)'),
-                Tab(text: 'Güvenlik'),
-                Tab(text: 'Hakkında & Geliştirici'),
-              ],
-            ),
-          ),
-          body: authState is! Authenticated
-              ? const Center(
-                  child: Text(
-                    'Lütfen giriş yapın.',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                )
-              : TabBarView(
-                  children: [
-                    // ─── 1. Profil Sekmesi ─────────────────────────────
-                    _buildProfileTab(),
-
-                    // ─── 2. Gizlilik Sekmesi ───────────────────────────
-                    _buildPrivacyTab(),
-
-                    // ─── 3. Oynatıcı Tercihleri Sekmesi ────────────────
-                    _buildPlayerPreferencesTab(),
-
-                    // ─── 4. AniList & MAL Bağlantıları ─────────────────
-                    _buildIntegrationsTab(),
-
-                    // ─── 5. Güvenlik & Hesap Sekmesi ───────────────────
-                    _buildSecurityTab(),
-
-                    // ─── 6. Hakkında & Geliştirici Sekmesi ─────────────
-                    _buildAboutAndDeveloperTab(),
-                  ],
+            appBar: AppBar(
+              backgroundColor: AppColors.background,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white,
+                  size: 20,
                 ),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/');
+                  }
+                },
+              ),
+              title: Text(
+                'Ayarlar & Profil',
+                style: AppTypography.headlineMedium.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              bottom: const TabBar(
+                isScrollable: true,
+                indicatorColor: AppColors.primary,
+                labelColor: AppColors.primary,
+                unselectedLabelColor: AppColors.textSecondary,
+                tabs: [
+                  Tab(text: 'Profil'),
+                  Tab(text: 'Gizlilik'),
+                  Tab(text: 'Oynatıcı'),
+                  Tab(text: 'Bağlantılar (AniList & MAL)'),
+                  Tab(text: 'Güvenlik'),
+                  Tab(text: 'Hakkında & Geliştirici'),
+                ],
+              ),
+            ),
+            body: authState is! Authenticated
+                ? const Center(
+                    child: Text(
+                      'Lütfen giriş yapın.',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  )
+                : TabBarView(
+                    children: [
+                      // ─── 1. Profil Sekmesi ─────────────────────────────
+                      _buildProfileTab(),
+
+                      // ─── 2. Gizlilik Sekmesi ───────────────────────────
+                      _buildPrivacyTab(),
+
+                      // ─── 3. Oynatıcı Tercihleri Sekmesi ────────────────
+                      _buildPlayerPreferencesTab(),
+
+                      // ─── 4. AniList & MAL Bağlantıları ─────────────────
+                      _buildIntegrationsTab(),
+
+                      // ─── 5. Güvenlik & Hesap Sekmesi ───────────────────
+                      _buildSecurityTab(),
+
+                      // ─── 6. Hakkında & Geliştirici Sekmesi ─────────────
+                      _buildAboutAndDeveloperTab(),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
@@ -153,11 +170,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isUploadingAvatar = false;
   String _previewAvatarUrl = '';
 
-
-
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
     if (image != null) {
       setState(() => _isUploadingAvatar = true);
       try {
@@ -191,13 +209,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   radius: 46,
                   backgroundColor: AppColors.surfaceElevated,
                   child: ClipOval(
-                    child: _isUploadingAvatar 
-                        ? const CircularProgressIndicator(color: AppColors.primary) 
+                    child: _isUploadingAvatar
+                        ? const CircularProgressIndicator(
+                            color: AppColors.primary,
+                          )
                         : (_previewAvatarUrl.isNotEmpty
-                            ? (_previewAvatarUrl.startsWith('data:') 
-                                ? Image.memory(base64Decode(_previewAvatarUrl.split(',')[1]), fit: BoxFit.cover, width: 92, height: 92)
-                                : AppCachedImage(imageUrl: _previewAvatarUrl, fit: BoxFit.cover, width: 92, height: 92))
-                            : const Icon(Icons.person, size: 48, color: AppColors.textSecondary)),
+                              ? (_previewAvatarUrl.startsWith('data:')
+                                    ? Image.memory(
+                                        base64Decode(
+                                          _previewAvatarUrl.split(',')[1],
+                                        ),
+                                        fit: BoxFit.cover,
+                                        width: 92,
+                                        height: 92,
+                                      )
+                                    : AppCachedImage(
+                                        imageUrl: _previewAvatarUrl,
+                                        fit: BoxFit.cover,
+                                        width: 92,
+                                        height: 92,
+                                      ))
+                              : const Icon(
+                                  Icons.person,
+                                  size: 48,
+                                  color: AppColors.textSecondary,
+                                )),
                   ),
                 ),
                 Positioned(
@@ -211,7 +247,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         color: AppColors.primary,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.camera_alt_rounded, size: 16, color: Colors.black),
+                      child: const Icon(
+                        Icons.camera_alt_rounded,
+                        size: 16,
+                        color: Colors.black,
+                      ),
                     ),
                   ),
                 ),
@@ -248,18 +288,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               onPressed: () {
                 context.read<SettingsBloc>().add(
-                      UpdateProfileRequested(
-                        displayName: _nameController.text.trim(),
-                        bio: _bioController.text.trim(),
-                        avatarUrl: _avatarController.text.trim(),
-                      ),
-                    );
+                  UpdateProfileRequested(
+                    displayName: _nameController.text.trim(),
+                    bio: _bioController.text.trim(),
+                    avatarUrl: _avatarController.text.trim(),
+                  ),
+                );
               },
-              child: const Text('Değişiklikleri Kaydet', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Değişiklikleri Kaydet',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],
@@ -274,7 +322,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Gizli Hesap', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            title: const Text(
+              'Gizli Hesap',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             subtitle: const Text(
               'Hesabınızı sadece onayladığınız takipçiler görebilir.',
               style: TextStyle(color: AppColors.textMuted, fontSize: 12),
@@ -283,7 +337,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             activeThumbColor: AppColors.primary,
             onChanged: (val) {
               setState(() => _isPrivate = val);
-              context.read<SettingsBloc>().add(UpdateProfileRequested(isPrivate: val));
+              context.read<SettingsBloc>().add(
+                UpdateProfileRequested(isPrivate: val),
+              );
             },
           ),
         ],
@@ -302,17 +358,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: ['2160p (4K)', '1440p (2K)', '1080p', '720p', '480p', '360p'].map((q) {
-              final isSel = _defaultQuality == q;
-              return ChoiceChip(
-                label: Text(q),
-                selected: isSel,
-                selectedColor: AppColors.primary,
-                backgroundColor: AppColors.surfaceElevated,
-                labelStyle: TextStyle(color: isSel ? Colors.black : AppColors.textSecondary, fontWeight: FontWeight.bold),
-                onSelected: (_) => setState(() => _defaultQuality = q),
-              );
-            }).toList(),
+            children:
+                [
+                  '2160p (4K)',
+                  '1440p (2K)',
+                  '1080p',
+                  '720p',
+                  '480p',
+                  '360p',
+                ].map((q) {
+                  final isSel = _defaultQuality == q;
+                  return ChoiceChip(
+                    label: Text(q),
+                    selected: isSel,
+                    selectedColor: AppColors.primary,
+                    backgroundColor: AppColors.surfaceElevated,
+                    labelStyle: TextStyle(
+                      color: isSel ? Colors.black : AppColors.textSecondary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    onSelected: (_) => setState(() => _defaultQuality = q),
+                  );
+                }).toList(),
           ),
           const Divider(color: AppColors.border, height: 32),
 
@@ -321,17 +388,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: ['Orijinal (Japonca)', 'Türkçe Dublaj', 'İngilizce Dublaj'].map((a) {
-              final isSel = _defaultAudio == a;
-              return ChoiceChip(
-                label: Text(a),
-                selected: isSel,
-                selectedColor: AppColors.primary,
-                backgroundColor: AppColors.surfaceElevated,
-                labelStyle: TextStyle(color: isSel ? Colors.black : AppColors.textSecondary, fontWeight: FontWeight.bold),
-                onSelected: (_) => setState(() => _defaultAudio = a),
-              );
-            }).toList(),
+            children:
+                ['Orijinal (Japonca)', 'Türkçe Dublaj', 'İngilizce Dublaj'].map(
+                  (a) {
+                    final isSel = _defaultAudio == a;
+                    return ChoiceChip(
+                      label: Text(a),
+                      selected: isSel,
+                      selectedColor: AppColors.primary,
+                      backgroundColor: AppColors.surfaceElevated,
+                      labelStyle: TextStyle(
+                        color: isSel ? Colors.black : AppColors.textSecondary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      onSelected: (_) => setState(() => _defaultAudio = a),
+                    );
+                  },
+                ).toList(),
           ),
           const Divider(color: AppColors.border, height: 32),
 
@@ -340,7 +413,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Altyazı Boyutu', style: AppTypography.titleSmall),
-              Text('${_subtitleSize.toInt()} pt', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+              Text(
+                '${_subtitleSize.toInt()} pt',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
           Slider(
@@ -360,16 +439,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Kaydırılabilir Parlaklık', style: TextStyle(color: Colors.white)),
-            subtitle: const Text('Ekranın sol tarafını yukarı/aşağı kaydırarak parlaklığı ayarla.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            title: const Text(
+              'Kaydırılabilir Parlaklık',
+              style: TextStyle(color: Colors.white),
+            ),
+            subtitle: const Text(
+              'Ekranın sol tarafını yukarı/aşağı kaydırarak parlaklığı ayarla.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
             value: _gestureBrightness,
             activeThumbColor: AppColors.primary,
             onChanged: (val) => setState(() => _gestureBrightness = val),
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Kaydırılabilir Ses', style: TextStyle(color: Colors.white)),
-            subtitle: const Text('Ekranın sağ tarafını yukarı/aşağı kaydırarak sesi ayarla.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            title: const Text(
+              'Kaydırılabilir Ses',
+              style: TextStyle(color: Colors.white),
+            ),
+            subtitle: const Text(
+              'Ekranın sağ tarafını yukarı/aşağı kaydırarak sesi ayarla.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
             value: _gestureVolume,
             activeThumbColor: AppColors.primary,
             onChanged: (val) => setState(() => _gestureVolume = val),
@@ -378,8 +469,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Otomatik Sonraki Bölüm', style: TextStyle(color: Colors.white)),
-            subtitle: const Text('Bölüm bittiğinde otomatik sonraki bölüme geçer.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            title: const Text(
+              'Otomatik Sonraki Bölüm',
+              style: TextStyle(color: Colors.white),
+            ),
+            subtitle: const Text(
+              'Bölüm bittiğinde otomatik sonraki bölüme geçer.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
             value: _autoNext,
             activeThumbColor: AppColors.primary,
             onChanged: (val) => setState(() => _autoNext = val),
@@ -388,8 +485,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Otomatik İntro Atlama', style: TextStyle(color: Colors.white)),
-            subtitle: const Text('İntro tespit edildiğinde dokunmaya gerek kalmadan atlar.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            title: const Text(
+              'Otomatik İntro Atlama',
+              style: TextStyle(color: Colors.white),
+            ),
+            subtitle: const Text(
+              'İntro tespit edildiğinde dokunmaya gerek kalmadan atlar.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
             value: _autoSkipIntro,
             activeThumbColor: AppColors.primary,
             onChanged: (val) => setState(() => _autoSkipIntro = val),
@@ -433,18 +536,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               onPressed: () {
-                if (_curPassController.text.isNotEmpty && _newPassController.text.isNotEmpty) {
+                if (_curPassController.text.isNotEmpty &&
+                    _newPassController.text.isNotEmpty) {
                   context.read<SettingsBloc>().add(
-                        ChangePasswordRequested(
-                          currentPassword: _curPassController.text,
-                          newPassword: _newPassController.text,
-                        ),
-                      );
+                    ChangePasswordRequested(
+                      currentPassword: _curPassController.text,
+                      newPassword: _newPassController.text,
+                    ),
+                  );
                   _curPassController.clear();
                   _newPassController.clear();
                 }
               },
-              child: const Text('Şifreyi Güncelle', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Şifreyi Güncelle',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
           const Divider(color: AppColors.border, height: 48),
@@ -455,11 +565,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: double.infinity,
             height: 48,
             child: OutlinedButton.icon(
-              icon: const Icon(Icons.logout_rounded, color: AppColors.accentCrimson),
-              label: const Text('Çıkış Yap', style: TextStyle(color: AppColors.accentCrimson, fontWeight: FontWeight.bold)),
+              icon: const Icon(
+                Icons.logout_rounded,
+                color: AppColors.accentCrimson,
+              ),
+              label: const Text(
+                'Çıkış Yap',
+                style: TextStyle(
+                  color: AppColors.accentCrimson,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: AppColors.accentCrimson),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               onPressed: () {
                 context.read<AuthBloc>().add(LogoutRequested());
@@ -496,12 +617,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       const Text(
                         'Otomatik Bölüm Senkronizasyonu',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Bir bölümün en az %85\'i izlendiğinde bağlı hesaplarınızdaki izleme geçmişi otomatik güncellenir.',
-                        style: TextStyle(color: AppColors.textSecondary.withAlpha(200), fontSize: 12),
+                        style: TextStyle(
+                          color: AppColors.textSecondary.withAlpha(200),
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -527,7 +655,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(AppSpacing.borderRadiusLg),
               border: Border.all(
-                color: tracking.isAniListConnected ? const Color(0xFF02A9FF).withAlpha(120) : AppColors.border,
+                color: tracking.isAniListConnected
+                    ? const Color(0xFF02A9FF).withAlpha(120)
+                    : AppColors.border,
                 width: 1.2,
               ),
             ),
@@ -546,7 +676,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: const Center(
                         child: Text(
                           'AL',
-                          style: TextStyle(color: Color(0xFF02A9FF), fontWeight: FontWeight.w900, fontSize: 16),
+                          style: TextStyle(
+                            color: Color(0xFF02A9FF),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
                     ),
@@ -557,12 +691,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: [
                           const Text(
                             'AniList',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                           Text(
-                            tracking.isAniListConnected ? 'Bağlantı Aktif' : 'Bağlı Değil',
+                            tracking.isAniListConnected
+                                ? 'Bağlantı Aktif'
+                                : 'Bağlı Değil',
                             style: TextStyle(
-                              color: tracking.isAniListConnected ? AppColors.successGreen : AppColors.textMuted,
+                              color: tracking.isAniListConnected
+                                  ? AppColors.successGreen
+                                  : AppColors.textMuted,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -572,7 +714,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     if (tracking.isAniListConnected)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.successGreen.withAlpha(35),
                           borderRadius: BorderRadius.circular(8),
@@ -580,9 +725,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.check_circle_rounded, color: AppColors.successGreen, size: 14),
+                            Icon(
+                              Icons.check_circle_rounded,
+                              color: AppColors.successGreen,
+                              size: 14,
+                            ),
                             SizedBox(width: 4),
-                            Text('Bağlandı', style: TextStyle(color: AppColors.successGreen, fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(
+                              'Bağlandı',
+                              style: TextStyle(
+                                color: AppColors.successGreen,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -607,7 +763,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(width: 10),
                         Text(
                           '@${tracking.aniListUser!['name'] ?? ''}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                       ],
                     ),
@@ -616,11 +776,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.link_off_rounded, color: AppColors.accentCrimson, size: 18),
-                      label: const Text('AniList Bağlantısını Kes', style: TextStyle(color: AppColors.accentCrimson)),
+                      icon: const Icon(
+                        Icons.link_off_rounded,
+                        color: AppColors.accentCrimson,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'AniList Bağlantısını Kes',
+                        style: TextStyle(color: AppColors.accentCrimson),
+                      ),
                       style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: AppColors.accentCrimson.withAlpha(120)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        side: BorderSide(
+                          color: AppColors.accentCrimson.withAlpha(120),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       onPressed: () async {
                         await tracking.disconnectAniList();
@@ -631,18 +802,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ] else ...[
                   const Text(
                     'İzlediğiniz bölümleri, puanlarınızı ve anime durumunuzu AniList profilinizle anlık senkronize edin.',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12.5,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.login_rounded, size: 18),
-                      label: const Text('AniList Token ile Bağlan', style: TextStyle(fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'AniList Token ile Bağlan',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF02A9FF),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       onPressed: () => _showTokenInputDialog(
                         title: 'AniList Bağlantısı',
@@ -654,11 +833,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (ok && mounted) {
                             setState(() {});
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('AniList hesabı başarıyla bağlandı!'), backgroundColor: AppColors.successGreen),
+                              const SnackBar(
+                                content: Text(
+                                  'AniList hesabı başarıyla bağlandı!',
+                                ),
+                                backgroundColor: AppColors.successGreen,
+                              ),
                             );
                           } else if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('AniList bağlantısı başarısız. Lütfen tokenı kontrol edin.'), backgroundColor: AppColors.accentCrimson),
+                              const SnackBar(
+                                content: Text(
+                                  'AniList bağlantısı başarısız. Lütfen tokenı kontrol edin.',
+                                ),
+                                backgroundColor: AppColors.accentCrimson,
+                              ),
                             );
                           }
                         },
@@ -678,7 +867,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(AppSpacing.borderRadiusLg),
               border: Border.all(
-                color: tracking.isMalConnected ? const Color(0xFF2E51A2).withAlpha(120) : AppColors.border,
+                color: tracking.isMalConnected
+                    ? const Color(0xFF2E51A2).withAlpha(120)
+                    : AppColors.border,
                 width: 1.2,
               ),
             ),
@@ -697,7 +888,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: const Center(
                         child: Text(
                           'MAL',
-                          style: TextStyle(color: Color(0xFF2E51A2), fontWeight: FontWeight.w900, fontSize: 14),
+                          style: TextStyle(
+                            color: Color(0xFF2E51A2),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ),
@@ -708,12 +903,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: [
                           const Text(
                             'MyAnimeList (MAL)',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                           Text(
-                            tracking.isMalConnected ? 'Bağlantı Aktif' : 'Bağlı Değil',
+                            tracking.isMalConnected
+                                ? 'Bağlantı Aktif'
+                                : 'Bağlı Değil',
                             style: TextStyle(
-                              color: tracking.isMalConnected ? AppColors.successGreen : AppColors.textMuted,
+                              color: tracking.isMalConnected
+                                  ? AppColors.successGreen
+                                  : AppColors.textMuted,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -723,7 +926,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     if (tracking.isMalConnected)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.successGreen.withAlpha(35),
                           borderRadius: BorderRadius.circular(8),
@@ -731,9 +937,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.check_circle_rounded, color: AppColors.successGreen, size: 14),
+                            Icon(
+                              Icons.check_circle_rounded,
+                              color: AppColors.successGreen,
+                              size: 14,
+                            ),
                             SizedBox(width: 4),
-                            Text('Bağlandı', style: TextStyle(color: AppColors.successGreen, fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(
+                              'Bağlandı',
+                              style: TextStyle(
+                                color: AppColors.successGreen,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -758,7 +975,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(width: 10),
                         Text(
                           '@${tracking.malUser!['name'] ?? ''}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                         ),
                       ],
                     ),
@@ -767,11 +988,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.link_off_rounded, color: AppColors.accentCrimson, size: 18),
-                      label: const Text('MyAnimeList Bağlantısını Kes', style: TextStyle(color: AppColors.accentCrimson)),
+                      icon: const Icon(
+                        Icons.link_off_rounded,
+                        color: AppColors.accentCrimson,
+                        size: 18,
+                      ),
+                      label: const Text(
+                        'MyAnimeList Bağlantısını Kes',
+                        style: TextStyle(color: AppColors.accentCrimson),
+                      ),
                       style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: AppColors.accentCrimson.withAlpha(120)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        side: BorderSide(
+                          color: AppColors.accentCrimson.withAlpha(120),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       onPressed: () async {
                         await tracking.disconnectMal();
@@ -782,18 +1014,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ] else ...[
                   const Text(
                     'İzleme listenizi MyAnimeList hesabınızla otomatik olarak güncel tutun.',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12.5,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       icon: const Icon(Icons.login_rounded, size: 18),
-                      label: const Text('MAL Token ile Bağlan', style: TextStyle(fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'MAL Token ile Bağlan',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2E51A2),
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       onPressed: () => _showTokenInputDialog(
                         title: 'MyAnimeList Bağlantısı',
@@ -805,11 +1045,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (ok && mounted) {
                             setState(() {});
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('MyAnimeList hesabı başarıyla bağlandı!'), backgroundColor: AppColors.successGreen),
+                              const SnackBar(
+                                content: Text(
+                                  'MyAnimeList hesabı başarıyla bağlandı!',
+                                ),
+                                backgroundColor: AppColors.successGreen,
+                              ),
                             );
                           } else if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('MAL bağlantısı başarısız. Lütfen tokenı kontrol edin.'), backgroundColor: AppColors.accentCrimson),
+                              const SnackBar(
+                                content: Text(
+                                  'MAL bağlantısı başarısız. Lütfen tokenı kontrol edin.',
+                                ),
+                                backgroundColor: AppColors.accentCrimson,
+                              ),
                             );
                           }
                         },
@@ -836,7 +1086,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Bağlantı açılamadı: $url'), backgroundColor: AppColors.accentCrimson),
+            SnackBar(
+              content: Text('Bağlantı açılamadı: $url'),
+              backgroundColor: AppColors.accentCrimson,
+            ),
           );
         }
       }
@@ -846,7 +1099,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _extractTokenFromInput(String input) {
     final trimmed = input.trim();
     if (trimmed.contains('access_token=')) {
-      final match = RegExp(r'access_token=([a-zA-Z0-9_\.\-]+)').firstMatch(trimmed);
+      final match = RegExp(r'access_token=([a-zA-Z0-9_\.\-]+)')
+          .firstMatch(trimmed);
       if (match != null && match.group(1) != null) {
         return match.group(1)!;
       }
@@ -873,7 +1127,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(AppSpacing.borderRadiusLg),
-              border: Border.all(color: AppColors.primary.withAlpha(70), width: 1),
+              border: Border.all(
+                color: AppColors.primary.withAlpha(70),
+                width: 1,
+              ),
             ),
             child: Row(
               children: [
@@ -892,7 +1149,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   child: const Center(
-                    child: Icon(Icons.play_arrow_rounded, color: Colors.black, size: 36),
+                    child: Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.black,
+                      size: 36,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -902,24 +1163,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       const Text(
                         'Calium Mobile',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 20,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       const Text(
                         'v1.1.2 (Beta) • Libmpv Video Engine',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Container(
                         margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: AppColors.primary.withAlpha(30),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Text(
                           'Hardware Acceleration: Active (Vulkan/OpenGL ES)',
-                          style: TextStyle(color: AppColors.primary, fontSize: 10.5, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
@@ -931,7 +1206,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: AppSpacing.lg),
 
           // Developer & Community Links
-          Text('Geliştirici & Topluluk Bağlantıları', style: AppTypography.titleMedium),
+          Text(
+            'Geliştirici & Topluluk Bağlantıları',
+            style: AppTypography.titleMedium,
+          ),
           const SizedBox(height: AppSpacing.md),
 
           _buildLinkTile(
@@ -976,12 +1254,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             child: const Row(
               children: [
-                Icon(Icons.favorite_rounded, color: AppColors.primary, size: 20),
+                Icon(
+                  Icons.favorite_rounded,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
                 SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     'Calium açık kaynaklı ve topluluk destekli bir anime streaming projesidir.',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
@@ -1013,9 +1298,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           child: Icon(icon, color: AppColors.primary, size: 20),
         ),
-        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text(subtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-        trailing: const Icon(Icons.open_in_new_rounded, color: Colors.white60, size: 18),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        ),
+        trailing: const Icon(
+          Icons.open_in_new_rounded,
+          color: Colors.white60,
+          size: 18,
+        ),
         onTap: () => _openExternalUrl(url),
       ),
     );
@@ -1036,7 +1335,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           backgroundColor: AppColors.surfaceDark,
-          title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          title: Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1045,19 +1351,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 GestureDetector(
                   onTap: () => _openExternalUrl(infoUrl),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF02A9FF).withAlpha(30),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.open_in_new_rounded, color: Color(0xFF02A9FF), size: 16),
+                        const Icon(
+                          Icons.open_in_new_rounded,
+                          color: Color(0xFF02A9FF),
+                          size: 16,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             infoUrlLabel ?? 'Yetkilendirme Sayfasını Aç (URL)',
-                            style: const TextStyle(color: Color(0xFF02A9FF), fontSize: 12, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              color: Color(0xFF02A9FF),
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
@@ -1071,11 +1388,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 maxLines: 2,
                 decoration: InputDecoration(
-                  hintText: '$hintText\n(Tam URL veya token yapıştırabilirsiniz)',
-                  hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  hintText:
+                      '$hintText\n(Tam URL veya token yapıştırabilirsiniz)',
+                  hintStyle: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
                   filled: true,
                   fillColor: AppColors.surfaceElevated,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(color: AppColors.border),
+                  ),
                 ),
               ),
             ],
@@ -1083,10 +1407,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Vazgeç', style: TextStyle(color: AppColors.textMuted)),
+              child: const Text(
+                'Vazgeç',
+                style: TextStyle(color: AppColors.textMuted),
+              ),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.black),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.black,
+              ),
               onPressed: isSubmitting
                   ? null
                   : () async {
@@ -1099,8 +1429,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       if (ctx.mounted) Navigator.pop(ctx);
                     },
               child: isSubmitting
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                  : const Text('Bağla', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.black,
+                      ),
+                    )
+                  : const Text(
+                      'Bağla',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
             ),
           ],
         ),

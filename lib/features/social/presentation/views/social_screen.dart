@@ -20,7 +20,8 @@ class SocialScreen extends StatefulWidget {
   State<SocialScreen> createState() => _SocialScreenState();
 }
 
-class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderStateMixin {
+class _SocialScreenState extends State<SocialScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -66,7 +67,10 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
             actions: [
               IconButton(
                 tooltip: 'Kullanıcı Ara & Takip Et',
-                icon: const Icon(Icons.person_add_alt_1_rounded, color: AppColors.primary),
+                icon: const Icon(
+                  Icons.person_add_alt_1_rounded,
+                  color: AppColors.primary,
+                ),
                 onPressed: _openUserSearch,
               ),
             ],
@@ -96,14 +100,21 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                       if (totalBadge > 0) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.accentCrimson,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
                             '$totalBadge',
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
@@ -117,7 +128,10 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.black,
             icon: const Icon(Icons.person_search_rounded),
-            label: const Text('Kullanıcı Ara', style: TextStyle(fontWeight: FontWeight.bold)),
+            label: const Text(
+              'Kullanıcı Ara',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             onPressed: _openUserSearch,
           ),
           body: (state is SocialLoading || state is SocialInitial)
@@ -130,17 +144,17 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                   ),
                 )
               : (state is SocialLoaded)
-                  ? TabBarView(
-                      controller: _tabController,
-                      children: [
-                        // ─── 1. Friends Tab ──────────────────────────────
-                        _buildFriendsTab(context, state),
+              ? TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // ─── 1. Friends Tab ──────────────────────────────
+                    _buildFriendsTab(context, state),
 
-                        // ─── 2. Requests & Notifications Tab ─────────────
-                        _buildRequestsAndNotificationsTab(context, state),
-                      ],
-                    )
-                  : const SizedBox.shrink(),
+                    // ─── 2. Requests & Notifications Tab ─────────────
+                    _buildRequestsAndNotificationsTab(context, state),
+                  ],
+                )
+              : const SizedBox.shrink(),
         );
       },
     );
@@ -160,7 +174,11 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                   color: AppColors.primary.withAlpha(25),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.people_outline_rounded, size: 54, color: AppColors.primary),
+                child: const Icon(
+                  Icons.people_outline_rounded,
+                  size: 54,
+                  color: AppColors.primary,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
@@ -174,7 +192,9 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
               const SizedBox(height: 8),
               Text(
                 'Diğer anime severleri bulmak ve takip etmek için sağ alttaki arama butonunu kullanabilirsiniz.',
-                style: AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),
@@ -182,12 +202,20 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onPressed: _openUserSearch,
                 icon: const Icon(Icons.person_add_alt_1_rounded, size: 20),
-                label: const Text('Arkadaş Bul & Takip Et', style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Arkadaş Bul & Takip Et',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -211,7 +239,10 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildRequestsAndNotificationsTab(BuildContext context, SocialLoaded state) {
+  Widget _buildRequestsAndNotificationsTab(
+    BuildContext context,
+    SocialLoaded state,
+  ) {
     final requests = state.followRequests;
     final notifications = state.notifications;
 
@@ -234,17 +265,28 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                       color: AppColors.surfaceElevated,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.notifications_none_rounded, size: 48, color: AppColors.textMuted),
+                    child: const Icon(
+                      Icons.notifications_none_rounded,
+                      size: 48,
+                      color: AppColors.textMuted,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   const Text(
                     'Yeni İstek veya Bildirim Yok',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   const Text(
                     'Takip istekleri ve favori animelerinizin yeni bölümleri burada görünecek.',
-                    style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -266,11 +308,18 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
           if (requests.isNotEmpty) ...[
             Row(
               children: [
-                const Icon(Icons.person_pin_circle_rounded, color: AppColors.primary, size: 18),
+                const Icon(
+                  Icons.person_pin_circle_rounded,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'Gelen Takip İstekleri (${requests.length})',
-                  style: AppTypography.titleSmall.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: AppTypography.titleSmall.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -286,19 +335,90 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.notifications_active_rounded, color: AppColors.primary, size: 18),
+                    const Icon(
+                      Icons.notifications_active_rounded,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Bildirimler',
-                      style: AppTypography.titleSmall.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                      style: AppTypography.titleSmall.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
-                TextButton(
-                  onPressed: () {
-                    context.read<SocialBloc>().add(MarkNotificationsReadRequested());
-                  },
-                  child: const Text('Tümünü Okundu Say', style: TextStyle(color: AppColors.primary, fontSize: 12)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        context.read<SocialBloc>().add(
+                          MarkNotificationsReadRequested(),
+                        );
+                      },
+                      child: const Text(
+                        'Okundu Say',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: AppColors.surfaceDark,
+                            title: const Text(
+                              'Bildirimler Silinsin mi?',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            content: const Text(
+                              'Tüm bildirim geçmişiniz kalıcı olarak temizlenecektir.',
+                              style: TextStyle(color: AppColors.textSecondary),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(),
+                                child: const Text(
+                                  'Vazgeç',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(ctx).pop();
+                                  context.read<SocialBloc>().add(
+                                    ClearNotificationsRequested(),
+                                  );
+                                },
+                                child: const Text(
+                                  'Temizle',
+                                  style: TextStyle(
+                                    color: AppColors.accentCrimson,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        'Temizle',
+                        style: TextStyle(
+                          color: AppColors.accentCrimson,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -310,7 +430,10 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildFollowRequestCard(BuildContext context, FollowRequestEntity req) {
+  Widget _buildFollowRequestCard(
+    BuildContext context,
+    FollowRequestEntity req,
+  ) {
     final hasAvatar = req.avatarUrl != null && req.avatarUrl!.isNotEmpty;
 
     return Container(
@@ -338,7 +461,10 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
               backgroundColor: AppColors.surfaceElevated,
               child: Text(
                 req.username.isNotEmpty ? req.username[0].toUpperCase() : 'U',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
           const SizedBox(width: 12),
@@ -350,11 +476,18 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
               children: [
                 Text(
                   req.displayName ?? req.username,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
                 Text(
                   '@${req.username}',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
@@ -365,19 +498,27 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
             tooltip: 'Kabul Et',
             style: IconButton.styleFrom(
               backgroundColor: AppColors.successGreen.withAlpha(35),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
-            icon: const Icon(Icons.check_rounded, color: AppColors.successGreen, size: 20),
+            icon: const Icon(
+              Icons.check_rounded,
+              color: AppColors.successGreen,
+              size: 20,
+            ),
             onPressed: () {
               context.read<SocialBloc>().add(
-                    RespondFollowRequestRequested(
-                      username: req.username,
-                      accept: true,
-                    ),
-                  );
+                RespondFollowRequestRequested(
+                  username: req.username,
+                  accept: true,
+                ),
+              );
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('${req.displayName ?? req.username} takip isteği kabul edildi.'),
+                  content: Text(
+                    '${req.displayName ?? req.username} takip isteği kabul edildi.',
+                  ),
                   backgroundColor: AppColors.successGreen,
                   duration: const Duration(seconds: 2),
                 ),
@@ -391,16 +532,22 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
             tooltip: 'Reddet',
             style: IconButton.styleFrom(
               backgroundColor: AppColors.accentCrimson.withAlpha(35),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
-            icon: const Icon(Icons.close_rounded, color: AppColors.accentCrimson, size: 20),
+            icon: const Icon(
+              Icons.close_rounded,
+              color: AppColors.accentCrimson,
+              size: 20,
+            ),
             onPressed: () {
               context.read<SocialBloc>().add(
-                    RespondFollowRequestRequested(
-                      username: req.username,
-                      accept: false,
-                    ),
-                  );
+                RespondFollowRequestRequested(
+                  username: req.username,
+                  accept: false,
+                ),
+              );
             },
           ),
         ],
@@ -445,7 +592,9 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
           color: n.isUnread ? AppColors.surfaceElevated : AppColors.surfaceDark,
           borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
           border: Border.all(
-            color: n.isUnread ? AppColors.primary.withAlpha(100) : AppColors.border,
+            color: n.isUnread
+                ? AppColors.primary.withAlpha(100)
+                : AppColors.border,
             width: 0.8,
           ),
         ),
@@ -472,7 +621,9 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                         n.title,
                         style: TextStyle(
                           color: Colors.white,
-                          fontWeight: n.isUnread ? FontWeight.bold : FontWeight.w600,
+                          fontWeight: n.isUnread
+                              ? FontWeight.bold
+                              : FontWeight.w600,
                           fontSize: 13,
                         ),
                       ),
@@ -491,7 +642,9 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                   Text(
                     n.body,
                     style: TextStyle(
-                      color: n.isUnread ? Colors.white70 : AppColors.textSecondary,
+                      color: n.isUnread
+                          ? Colors.white70
+                          : AppColors.textSecondary,
                       fontSize: 12,
                     ),
                   ),
@@ -513,7 +666,10 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
       },
       borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
           color: AppColors.surfaceDark,
           borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
@@ -537,8 +693,13 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                     radius: 20,
                     backgroundColor: AppColors.surfaceElevated,
                     child: Text(
-                      friend.username.isNotEmpty ? friend.username[0].toUpperCase() : 'U',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                      friend.username.isNotEmpty
+                          ? friend.username[0].toUpperCase()
+                          : 'U',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 Positioned(
@@ -548,9 +709,14 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                     width: 10,
                     height: 10,
                     decoration: BoxDecoration(
-                      color: friend.isOnline ? AppColors.successGreen : AppColors.textMuted,
+                      color: friend.isOnline
+                          ? AppColors.successGreen
+                          : AppColors.textMuted,
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.surfaceDark, width: 2),
+                      border: Border.all(
+                        color: AppColors.surfaceDark,
+                        width: 2,
+                      ),
                     ),
                   ),
                 ),
@@ -565,14 +731,18 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                 children: [
                   Text(
                     friend.displayName ?? friend.username,
-                    style: AppTypography.titleSmall.copyWith(color: Colors.white),
+                    style: AppTypography.titleSmall.copyWith(
+                      color: Colors.white,
+                    ),
                   ),
                   Text(
                     friend.activityText != null
                         ? 'İzliyor: ${friend.activityText}'
                         : (friend.isOnline ? 'Çevrimiçi' : 'Çevrimdışı'),
                     style: AppTypography.caption.copyWith(
-                      color: friend.activityText != null ? AppColors.primary : AppColors.textMuted,
+                      color: friend.activityText != null
+                          ? AppColors.primary
+                          : AppColors.textMuted,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -580,7 +750,11 @@ class _SocialScreenState extends State<SocialScreen> with SingleTickerProviderSt
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 14),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              color: Colors.white24,
+              size: 14,
+            ),
           ],
         ),
       ),
