@@ -1,313 +1,301 @@
 import 'dart:convert';
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
-class TrackingService {
+import 'package:calium_stream/core/constants/api_constants.dart';
+import 'package:calium_stream/core/network/dio_client.dart';
+import 'package:calium_stream/features/auth/data/datasources/auth_remote_datasource.dart';
+
+class TrackingService extends ChangeNotifier {
   TrackingService._();
   static final TrackingService instance = TrackingService._();
 
   static const String _boxName = 'tracking_integrations';
-  static const String _aniListTokenKey = 'anilist_token';
-  static const String _aniListUserKey = 'anilist_user';
-  static const String _malTokenKey = 'mal_token';
-  static const String _malUserKey = 'mal_user';
   static const String _autoScrobbleKey = 'auto_scrobble';
-
-  final Dio _dio = Dio();
+  static const String _cachedIntegrationsKey = 'cached_integrations_v2';
 
   bool _initialized = false;
-  String? _aniListToken;
-  Map<String, dynamic>? _aniListUser;
-  String? _malToken;
-  Map<String, dynamic>? _malUser;
   bool _autoScrobble = true;
+  bool _isSyncing = false;
 
-  bool get isAniListConnected => _aniListToken != null && _aniListToken!.isNotEmpty;
-  bool get isMalConnected => _malToken != null && _malToken!.isNotEmpty;
-  Map<String, dynamic>? get aniListUser => _aniListUser;
-  Map<String, dynamic>? get malUser => _malUser;
+  bool _isAniListConnected = false;
+  String? _aniListUsername;
+  String? _aniListStatus;
+  DateTime? _aniListLastSyncedAt;
+  String? _aniListError;
+
+  bool _isMalConnected = false;
+  String? _malUsername;
+  String? _malStatus;
+  DateTime? _malLastSyncedAt;
+  String? _malError;
+
+  List<Map<String, dynamic>> _entries = [];
+  List<Map<String, dynamic>> _conflicts = [];
+
+  bool get isAniListConnected => _isAniListConnected;
+  bool get isMalConnected => _isMalConnected;
+  String? get aniListUsername => _aniListUsername;
+  String? get malUsername => _malUsername;
+  String? get aniListStatus => _aniListStatus;
+  String? get malStatus => _malStatus;
+  DateTime? get aniListLastSyncedAt => _aniListLastSyncedAt;
+  DateTime? get malLastSyncedAt => _malLastSyncedAt;
+  String? get aniListError => _aniListError;
+  String? get malError => _malError;
+
+  Map<String, dynamic>? get aniListUser => _isAniListConnected
+      ? {
+          'name': _aniListUsername ?? '',
+          'status': _aniListStatus,
+          'lastSyncedAt': _aniListLastSyncedAt?.toIso8601String(),
+        }
+      : null;
+
+  Map<String, dynamic>? get malUser => _isMalConnected
+      ? {
+          'name': _malUsername ?? '',
+          'status': _malStatus,
+          'lastSyncedAt': _malLastSyncedAt?.toIso8601String(),
+        }
+      : null;
+
   bool get autoScrobble => _autoScrobble;
+  bool get isSyncing => _isSyncing;
+  List<Map<String, dynamic>> get entries => _entries;
+  List<Map<String, dynamic>> get conflicts => _conflicts;
 
   Future<void> init() async {
     if (_initialized) return;
-    final box = await Hive.openBox(_boxName);
-    _aniListToken = box.get(_aniListTokenKey) as String?;
-    final rawAniUser = box.get(_aniListUserKey);
-    if (rawAniUser is String) {
-      try {
-        _aniListUser = jsonDecode(rawAniUser) as Map<String, dynamic>;
-      } catch (_) {}
-    } else if (rawAniUser is Map) {
-      _aniListUser = Map<String, dynamic>.from(rawAniUser);
-    }
+    try {
+      final box = await Hive.openBox(_boxName);
+      _autoScrobble = (box.get(_autoScrobbleKey) as bool?) ?? true;
+      final cachedRaw = box.get(_cachedIntegrationsKey);
+      if (cachedRaw is String) {
+        try {
+          final data = jsonDecode(cachedRaw) as Map<String, dynamic>;
+          _applyIntegrationsData(data);
+        } catch (_) {}
+      }
+    } catch (_) {}
 
-    _malToken = box.get(_malTokenKey) as String?;
-    final rawMalUser = box.get(_malUserKey);
-    if (rawMalUser is String) {
-      try {
-        _malUser = jsonDecode(rawMalUser) as Map<String, dynamic>;
-      } catch (_) {}
-    } else if (rawMalUser is Map) {
-      _malUser = Map<String, dynamic>.from(rawMalUser);
-    }
-
-    _autoScrobble = (box.get(_autoScrobbleKey) as bool?) ?? true;
     _initialized = true;
+    fetchIntegrations();
   }
 
   Future<void> setAutoScrobble(bool enabled) async {
     _autoScrobble = enabled;
-    final box = await Hive.openBox(_boxName);
-    await box.put(_autoScrobbleKey, enabled);
+    try {
+      final box = await Hive.openBox(_boxName);
+      await box.put(_autoScrobbleKey, enabled);
+    } catch (_) {}
+    notifyListeners();
   }
 
-  // ─── AniList Integration ───────────────────────────────────────────
-
-  Future<bool> connectAniList(String token) async {
+  Future<void> fetchIntegrations() async {
     try {
-      final cleanToken = token.trim();
-      const query = '''
-        query {
-          Viewer {
-            id
-            name
-            avatar {
-              medium
-              large
-            }
-          }
-        }
-      ''';
-
-      final response = await _dio.post(
-        'https://graphql.anilist.co',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $cleanToken',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-        ),
-        data: jsonEncode({'query': query}),
-      );
-
-      if (response.statusCode == 200 && response.data != null) {
-        final viewer = response.data['data']?['Viewer'];
-        if (viewer != null) {
-          _aniListToken = cleanToken;
-          _aniListUser = Map<String, dynamic>.from(viewer as Map);
-
+      final dio = GetIt.I<DioClient>();
+      final response = await dio.get('${ApiConstants.caliumBackendUrl}/api/integrations');
+      if (response.data is Map<String, dynamic>) {
+        final data = response.data as Map<String, dynamic>;
+        _applyIntegrationsData(data);
+        try {
           final box = await Hive.openBox(_boxName);
-          await box.put(_aniListTokenKey, cleanToken);
-          await box.put(_aniListUserKey, jsonEncode(_aniListUser));
-          return true;
-        }
+          await box.put(_cachedIntegrationsKey, jsonEncode(data));
+        } catch (_) {}
+        notifyListeners();
       }
-      return false;
     } catch (e) {
-      debugPrint('⚠️ AniList connect error: $e');
-      return false;
+      debugPrint('Error fetching integrations: $e');
     }
   }
 
-  Future<void> disconnectAniList() async {
-    _aniListToken = null;
-    _aniListUser = null;
-    final box = await Hive.openBox(_boxName);
-    await box.delete(_aniListTokenKey);
-    await box.delete(_aniListUserKey);
-  }
-
-  Future<bool> scrobbleAniList({
-    required String animeTitle,
-    required int episode,
-    bool isCompleted = false,
-  }) async {
-    if (!isAniListConnected || _aniListToken == null) return false;
-
-    try {
-      // Step 1: Find AniList Media ID
-      const searchQuery = '''
-        query (\$search: String) {
-          Media(search: \$search, type: ANIME) {
-            id
-            title {
-              romaji
-              english
-              native
-            }
-            episodes
-          }
-        }
-      ''';
-
-      final searchRes = await _dio.post(
-        'https://graphql.anilist.co',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $_aniListToken',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-        ),
-        data: jsonEncode({
-          'query': searchQuery,
-          'variables': {'search': animeTitle},
-        }),
-      );
-
-      final mediaId = searchRes.data['data']?['Media']?['id'];
-      final totalEpisodes = searchRes.data['data']?['Media']?['episodes'] as int?;
-      if (mediaId == null) return false;
-
-      final status = (isCompleted || (totalEpisodes != null && episode >= totalEpisodes))
-          ? 'COMPLETED'
-          : 'CURRENT';
-
-      // Step 2: Save Media List Entry
-      const mutateQuery = '''
-        mutation (\$mediaId: Int, \$progress: Int, \$status: MediaListStatus) {
-          SaveMediaListEntry(mediaId: \$mediaId, progress: \$progress, status: \$status) {
-            id
-            progress
-            status
-          }
-        }
-      ''';
-
-      final mutateRes = await _dio.post(
-        'https://graphql.anilist.co',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $_aniListToken',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-        ),
-        data: jsonEncode({
-          'query': mutateQuery,
-          'variables': {
-            'mediaId': mediaId,
-            'progress': episode,
-            'status': status,
-          },
-        }),
-      );
-
-      return mutateRes.statusCode == 200;
-    } catch (e) {
-      debugPrint('⚠️ AniList scrobble error: $e');
-      return false;
-    }
-  }
-
-  // ─── MyAnimeList Integration ───────────────────────────────────────
-
-  Future<bool> connectMal(String token) async {
-    try {
-      final cleanToken = token.trim();
-      final response = await _dio.get(
-        'https://api.myanimelist.net/v2/users/@me',
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $cleanToken',
-          },
-        ),
-      );
-
-      if (response.statusCode == 200 && response.data != null) {
-        _malToken = cleanToken;
-        _malUser = Map<String, dynamic>.from(response.data as Map);
-
-        final box = await Hive.openBox(_boxName);
-        await box.put(_malTokenKey, cleanToken);
-        await box.put(_malUserKey, jsonEncode(_malUser));
-        return true;
+  void _applyIntegrationsData(Map<String, dynamic> data) {
+    final connections = (data['connections'] as List?)?.cast<dynamic>() ?? [];
+    for (final raw in connections) {
+      if (raw is! Map) continue;
+      final conn = Map<String, dynamic>.from(raw);
+      final provider = conn['provider'] as String?;
+      final connected = conn['connected'] == true;
+      final username = conn['username'] as String?;
+      final status = conn['status'] as String?;
+      final error = conn['error'] as String?;
+      DateTime? lastSynced;
+      if (conn['lastSyncedAt'] != null) {
+        try {
+          lastSynced = DateTime.parse(conn['lastSyncedAt'].toString());
+        } catch (_) {}
       }
-      return false;
+
+      if (provider == 'anilist') {
+        _isAniListConnected = connected;
+        _aniListUsername = username;
+        _aniListStatus = status;
+        _aniListError = error;
+        _aniListLastSyncedAt = lastSynced;
+      } else if (provider == 'mal') {
+        _isMalConnected = connected;
+        _malUsername = username;
+        _malStatus = status;
+        _malError = error;
+        _malLastSyncedAt = lastSynced;
+      }
+    }
+
+    if (data['entries'] is List) {
+      _entries = (data['entries'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    if (data['conflicts'] is List) {
+      _conflicts = (data['conflicts'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+  }
+
+  Future<bool> linkProvider({
+    required String provider,
+    required Future<void> Function(String url) onOpenUrl,
+  }) async {
+    try {
+      final authDataSource = GetIt.I<AuthRemoteDataSource>();
+      final session = await authDataSource.startOAuth(
+        provider: provider,
+        intent: 'link',
+      );
+      await onOpenUrl(session.authorizationUrl);
+      final success = await authDataSource.pollOAuthLink(
+        transactionId: session.transactionId,
+        verifier: session.verifier,
+      );
+      if (success) {
+        await triggerSync();
+        await fetchIntegrations();
+      }
+      return success;
     } catch (e) {
-      debugPrint('⚠️ MAL connect error: $e');
+      debugPrint('Error linking provider $provider: $e');
       return false;
     }
   }
 
-  Future<void> disconnectMal() async {
-    _malToken = null;
-    _malUser = null;
-    final box = await Hive.openBox(_boxName);
-    await box.delete(_malTokenKey);
-    await box.delete(_malUserKey);
+  Future<bool> disconnectProvider({
+    required String provider,
+    String? password,
+  }) async {
+    try {
+      final dio = GetIt.I<DioClient>();
+      await dio.delete(
+        '${ApiConstants.caliumBackendUrl}/api/integrations/$provider',
+        data: password != null && password.isNotEmpty ? {'password': password} : {},
+      );
+      await fetchIntegrations();
+      return true;
+    } catch (e) {
+      debugPrint('Error disconnecting provider $provider: $e');
+      return false;
+    }
   }
 
-  Future<bool> scrobbleMal({
-    required String animeTitle,
-    required int episode,
-    bool isCompleted = false,
-  }) async {
-    if (!isMalConnected || _malToken == null) return false;
+  Future<bool> disconnectAniList() => disconnectProvider(provider: 'anilist');
+  Future<bool> disconnectMal() => disconnectProvider(provider: 'mal');
 
+  Future<void> triggerSync() async {
+    if (_isSyncing) return;
+    _isSyncing = true;
+    notifyListeners();
     try {
-      // Step 1: Search anime on MAL
-      final searchRes = await _dio.get(
-        'https://api.myanimelist.net/v2/anime',
-        queryParameters: {'q': animeTitle, 'limit': 1},
-        options: Options(
-          headers: {'Authorization': 'Bearer $_malToken'},
-        ),
-      );
+      final dio = GetIt.I<DioClient>();
+      await dio.post('${ApiConstants.caliumBackendUrl}/api/integrations/sync');
+      await Future.delayed(const Duration(seconds: 1));
+      await fetchIntegrations();
+    } catch (e) {
+      debugPrint('Error triggering sync: $e');
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
 
-      final dataList = searchRes.data['data'] as List?;
-      if (dataList == null || dataList.isEmpty) return false;
-      final animeId = dataList.first['node']?['id'];
-      if (animeId == null) return false;
-
-      final status = isCompleted ? 'completed' : 'watching';
-
-      // Step 2: Update status on MAL
-      final updateRes = await _dio.put(
-        'https://api.myanimelist.net/v2/anime/$animeId/my_list_status',
+  Future<bool> resolveConflict({
+    required String entryId,
+    required String provider,
+    required int version,
+    required int entryVersion,
+    required String choice,
+    bool confirmDeletion = false,
+  }) async {
+    try {
+      final dio = GetIt.I<DioClient>();
+      await dio.post(
+        '${ApiConstants.caliumBackendUrl}/api/tracking/conflicts/resolve',
         data: {
-          'status': status,
-          'num_watched_episodes': episode,
+          'entryId': entryId,
+          'provider': provider,
+          'version': version,
+          'entryVersion': entryVersion,
+          'choice': choice,
+          if (confirmDeletion) 'confirmDeletion': true,
         },
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $_malToken',
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        ),
       );
-
-      return updateRes.statusCode == 200;
+      _conflicts.removeWhere((c) => c['entryId'] == entryId && c['provider'] == provider);
+      notifyListeners();
+      await fetchIntegrations();
+      return true;
     } catch (e) {
-      debugPrint('⚠️ MAL scrobble error: $e');
+      debugPrint('Error resolving conflict: $e');
       return false;
     }
   }
-
-  // ─── Scrobble All Connected Providers ──────────────────────────────
 
   Future<void> scrobbleEpisode({
     required String animeTitle,
+    String? animeId,
     required int episode,
     bool isCompleted = false,
+    int? totalEpisodes,
   }) async {
     if (!_autoScrobble) return;
+    if (!_isAniListConnected && !_isMalConnected) return;
 
-    if (isAniListConnected) {
-      await scrobbleAniList(
-        animeTitle: animeTitle,
-        episode: episode,
-        isCompleted: isCompleted,
-      );
-    }
-    if (isMalConnected) {
-      await scrobbleMal(
-        animeTitle: animeTitle,
-        episode: episode,
-        isCompleted: isCompleted,
-      );
+    try {
+      final dio = GetIt.I<DioClient>();
+      Map<String, dynamic>? match;
+      for (final entry in _entries) {
+        if (animeId != null && animeId.isNotEmpty && entry['sourceId'] == animeId) {
+          match = entry;
+          break;
+        }
+        if (entry['title'] != null && entry['title'].toString().toLowerCase() == animeTitle.toLowerCase()) {
+          match = entry;
+          break;
+        }
+      }
+
+      if (match != null) {
+        await dio.post(
+          '${ApiConstants.caliumBackendUrl}/api/tracking/progress',
+          data: {
+            'entryId': match['id'],
+            'version': match['version'],
+            'completedEpisodes': episode,
+          },
+        );
+      } else {
+        await dio.patch(
+          '${ApiConstants.caliumBackendUrl}/api/tracking/entries',
+          data: {
+            if (animeId != null && animeId.isNotEmpty) 'sourceId': animeId,
+            'title': animeTitle,
+            ...?((totalEpisodes != null) ? {'totalEpisodes': totalEpisodes} : null),
+            'confirmMapping': true,
+            'value': {
+              'progress': episode,
+              'status': isCompleted ? 'completed' : 'watching',
+            },
+          },
+        );
+      }
+    } catch (e) {
+      debugPrint('Scrobble error: $e');
     }
   }
 }

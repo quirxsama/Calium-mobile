@@ -66,7 +66,7 @@ class AnimeRail extends StatelessWidget {
                 rating: anime.rating,
                 episodeBadge: anime.currentEpisode,
                 width: posterWidth,
-                onTap: () => context.go('/anime/${anime.id}'),
+                onTap: () => context.push('/anime/${anime.id}'),
               );
             },
           ),

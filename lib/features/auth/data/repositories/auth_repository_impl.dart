@@ -114,4 +114,39 @@ class AuthRepositoryImpl implements AuthRepository {
       return const Right(null);
     }
   }
+
+  @override
+  Future<Either<Failure, UserEntity>> loginWithOAuth({
+    required String provider,
+    required Future<void> Function(String url) onOpenUrl,
+  }) async {
+    try {
+      final session = await _remoteDataSource.startOAuth(
+        provider: provider,
+        intent: 'login',
+      );
+      await onOpenUrl(session.authorizationUrl);
+      final (user, token) = await _remoteDataSource.pollOAuthLogin(
+        transactionId: session.transactionId,
+        verifier: session.verifier,
+      );
+      if (token.isNotEmpty) {
+        await _secureStorage.write(
+          key: StorageKeys.authToken,
+          value: token,
+        );
+      }
+      await _secureStorage.write(
+        key: StorageKeys.currentUser,
+        value: user.username,
+      );
+      return Right(user);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(message: e.message));
+    } on NetworkException catch (e) {
+      return Left(NetworkFailure(message: e.message));
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
 }

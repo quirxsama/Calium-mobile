@@ -222,7 +222,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           posterUrl: anime.posterUrl,
                           rating: anime.rating,
                           episodeBadge: anime.currentEpisode,
-                          onTap: () => context.go('/anime/${anime.id}'),
+                          onTap: () => context.push('/anime/${anime.id}'),
                         );
                       },
                     );

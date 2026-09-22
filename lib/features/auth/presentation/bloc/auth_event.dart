@@ -47,3 +47,16 @@ final class UserSilentlyUpdated extends AuthEvent {
   List<Object?> get props => [user];
 }
 
+final class OAuthLoginRequested extends AuthEvent {
+  const OAuthLoginRequested({
+    required this.provider,
+    required this.onOpenUrl,
+  });
+
+  final String provider;
+  final Future<void> Function(String url) onOpenUrl;
+
+  @override
+  List<Object?> get props => [provider];
+}
+

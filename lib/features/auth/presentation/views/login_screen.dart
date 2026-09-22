@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
@@ -223,6 +224,69 @@ class _LoginScreenState extends State<LoginScreen> {
                                         color: Colors.white,
                                       ),
                                     ),
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            Row(
+                              children: [
+                                const Expanded(child: Divider(color: AppColors.border)),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                                  child: Text('VEYA', style: AppTypography.bodySmall.copyWith(color: AppColors.textMuted)),
+                                ),
+                                const Expanded(child: Divider(color: AppColors.border)),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            OutlinedButton.icon(
+                              onPressed: isLoading
+                                  ? null
+                                  : () {
+                                      context.read<AuthBloc>().add(
+                                            OAuthLoginRequested(
+                                              provider: 'anilist',
+                                              onOpenUrl: (url) => launchUrl(
+                                                Uri.parse(url),
+                                                mode: LaunchMode.externalApplication,
+                                              ),
+                                            ),
+                                          );
+                                    },
+                              icon: const Icon(Icons.bolt_rounded, color: Color(0xFF02A9FF), size: 20),
+                              label: const Text('AniList ile Giriş Yap', style: TextStyle(fontWeight: FontWeight.w600)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Color(0xFF02A9FF), width: 1.2),
+                                padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            OutlinedButton.icon(
+                              onPressed: isLoading
+                                  ? null
+                                  : () {
+                                      context.read<AuthBloc>().add(
+                                            OAuthLoginRequested(
+                                              provider: 'mal',
+                                              onOpenUrl: (url) => launchUrl(
+                                                Uri.parse(url),
+                                                mode: LaunchMode.externalApplication,
+                                              ),
+                                            ),
+                                          );
+                                    },
+                              icon: const Icon(Icons.bookmark_rounded, color: Color(0xFF2E51A2), size: 20),
+                              label: const Text('MyAnimeList ile Giriş Yap', style: TextStyle(fontWeight: FontWeight.w600)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(color: Color(0xFF2E51A2), width: 1.2),
+                                padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+                                ),
+                              ),
                             ),
                           ],
                         ),

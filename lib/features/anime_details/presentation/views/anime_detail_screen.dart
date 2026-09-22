@@ -49,7 +49,9 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
   bool _expandedSynopsis = false;
 
   void _back() {
-    if (context.canPop()) {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else if (context.canPop()) {
       context.pop();
     } else {
       context.go('/');
@@ -57,17 +59,23 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: AppColors.background,
-    appBar: AppBar(
-      leading: IconButton(
-        tooltip: 'Geri',
-        onPressed: _back,
-        icon: const Icon(Icons.arrow_back_rounded),
+  Widget build(BuildContext context) => PopScope(
+    canPop: false,
+    onPopInvokedWithResult: (didPop, result) {
+      if (didPop) return;
+      _back();
+    },
+    child: Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'Geri',
+          onPressed: _back,
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        title: const Text('Anime detayları'),
       ),
-      title: const Text('Anime detayları'),
-    ),
-    body: SafeArea(
+      body: SafeArea(
       top: false,
       child: AppContentFrame(
         child: BlocBuilder<AnimeDetailBloc, AnimeDetailState>(
@@ -142,7 +150,7 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
         ),
       ),
     ),
-  );
+  ));
 
   Widget _overview(AnimeDetailLoaded state) {
     final detail = state.detail;

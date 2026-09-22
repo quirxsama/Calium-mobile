@@ -49,6 +49,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_dotenv: ^5.2.1
   url_launcher: ^6.3.2
+  crypto: ^3.0.3
   flutter_local_notifications: ^18.0.1
   permission_handler: ^11.3.1
 

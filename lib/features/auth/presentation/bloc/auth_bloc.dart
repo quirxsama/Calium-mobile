@@ -22,6 +22,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LoginRequested>(_onLoginRequested);
     on<RegisterRequested>(_onRegisterRequested);
     on<LogoutRequested>(_onLogoutRequested);
+    on<OAuthLoginRequested>(_onOAuthLoginRequested);
     on<UserSilentlyUpdated>((event, emit) {
       emit(Authenticated(user: event.user));
     });
@@ -86,5 +87,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     emit(AuthLoading());
     await _authRepository.logout();
     emit(Unauthenticated());
+  }
+
+  Future<void> _onOAuthLoginRequested(
+    OAuthLoginRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(AuthLoading());
+    final result = await _authRepository.loginWithOAuth(
+      provider: event.provider,
+      onOpenUrl: event.onOpenUrl,
+    );
+    result.fold(
+      (failure) => emit(AuthFailureState(message: failure.message)),
+      (user) => emit(Authenticated(user: user)),
+    );
   }
 }

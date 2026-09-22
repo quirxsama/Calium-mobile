@@ -56,6 +56,8 @@ class AuthInterceptor extends Interceptor {
         options.path.startsWith('/api/lists') ||
         options.path.startsWith('/api/rooms') ||
         options.path.startsWith('/api/users') ||
+        options.path.startsWith('/api/integrations') ||
+        options.path.startsWith('/api/tracking') ||
         options.uri.host.contains('calium.fun');
 
     if (isCaliumEndpoint) {

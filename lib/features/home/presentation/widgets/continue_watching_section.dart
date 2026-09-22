@@ -201,7 +201,7 @@ class ContinueWatchingSection extends StatelessWidget {
                   final progress = (item.watchProgress ?? 0.5).clamp(0.0, 1.0);
 
                   return GestureDetector(
-                    onTap: () => context.go('/anime/${item.id}'),
+                    onTap: () => context.push('/anime/${item.id}'),
                     child: SizedBox(
                       width: 220,
                       child: Column(

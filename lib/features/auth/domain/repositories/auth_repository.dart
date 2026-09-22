@@ -18,4 +18,9 @@ abstract class AuthRepository {
   Future<Either<Failure, UserEntity>> getCurrentUser();
 
   Future<Either<Failure, void>> logout();
+
+  Future<Either<Failure, UserEntity>> loginWithOAuth({
+    required String provider,
+    required Future<void> Function(String url) onOpenUrl,
+  });
 }

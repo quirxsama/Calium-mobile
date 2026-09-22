@@ -261,7 +261,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               posterUrl: anime.posterUrl,
               rating: anime.rating,
               episodeBadge: anime.currentEpisode,
-              onTap: () => context.go('/anime/${anime.id}'),
+              onTap: () => context.push('/anime/${anime.id}'),
             );
           },
         ),

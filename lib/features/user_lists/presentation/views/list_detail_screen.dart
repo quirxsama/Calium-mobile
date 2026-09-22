@@ -9,6 +9,7 @@ import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/anime_poster_card.dart';
 import 'package:calium_stream/core/widgets/adaptive_poster_grid.dart';
 import 'package:calium_stream/core/widgets/app_content_frame.dart';
+import 'package:calium_stream/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:calium_stream/features/user_lists/domain/entities/user_list_entity.dart';
 import 'package:calium_stream/features/user_lists/domain/repositories/user_lists_repository.dart';
 import 'package:calium_stream/features/user_lists/presentation/bloc/user_lists_bloc.dart';
@@ -106,8 +107,62 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     }, (_) => _fetchDetails());
   }
 
+  Future<void> _confirmDeleteList() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        title: const Text(
+          'Listeyi Sil',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          '"${_list?.name}" listesi ve içindeki tüm anime kayıtları silinsin mi?',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Vazgeç', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Sil',
+              style: TextStyle(color: AppColors.accentCrimson, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    final res = await GetIt.I<UserListsRepository>().deleteList(widget.listId);
+    res.fold(
+      (f) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(f.message)));
+        }
+      },
+      (_) {
+        if (mounted) {
+          context.read<UserListsBloc>().add(LoadUserListsRequested());
+          context.pop();
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authState = context.watch<AuthBloc>().state;
+    final currentUserId = authState is Authenticated ? authState.user.id : null;
+    final isOwner = _list != null && _list!.userId == currentUserId;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -130,6 +185,15 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          if (isOwner)
+            IconButton(
+              icon: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.accentCrimson,
+              ),
+              tooltip: 'Listeyi Sil',
+              onPressed: _confirmDeleteList,
+            ),
           if (_list != null)
             IconButton(
               icon: Icon(

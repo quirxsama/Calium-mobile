@@ -365,8 +365,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
             mounted &&
             !_isReconnecting &&
             _currentStreamUrl.isNotEmpty &&
-            _autoNextEpisode &&
-            !_isDismissedNextEpPrompt) {
+            _autoNextEpisode) {
           final cubitState = context.read<PlayerCubit>().state;
           if (cubitState is PlayerReady) {
             final nextEp = cubitState.sourceData.nextEpisode;
@@ -528,8 +527,10 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         _hasScrobbledCurrentEpisode = true;
         TrackingService.instance.scrobbleEpisode(
           animeTitle: widget.animeTitle,
+          animeId: widget.animeId,
           episode: _currentEpisodeNumber,
           isCompleted: ratio >= 0.95,
+          totalEpisodes: _seasonEpisodes.isNotEmpty ? _seasonEpisodes.length : null,
         );
       }
     }
@@ -1464,8 +1465,10 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                         builder: (context, pos, _) {
                           final totalSec = _duration.inSeconds;
                           final currentSec = pos.inSeconds;
-                          final isNearEnd =
-                              totalSec > 45 && currentSec >= (totalSec - 45);
+                          final nextEpTime = state.sourceData.nextEpisodeTime;
+                          final isNearEnd = nextEpTime != null && nextEpTime > 0 && nextEpTime < totalSec
+                              ? (currentSec >= nextEpTime)
+                              : (totalSec > 15 && currentSec >= (totalSec - 8));
 
                           if (!isNearEnd) return const SizedBox.shrink();
 
