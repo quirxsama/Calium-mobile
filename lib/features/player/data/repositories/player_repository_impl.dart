@@ -1,5 +1,5 @@
 import 'package:dartz/dartz.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 
 import 'package:calium_stream/core/error/exceptions.dart';
 import 'package:calium_stream/core/error/failures.dart';
@@ -77,7 +77,7 @@ class PlayerRepositoryImpl implements PlayerRepository {
     String episodeThumb = '',
   }) async {
     try {
-      final box = Hive.box('history');
+      final box = AccountSession.instance.box('history');
       final existing = box.get(animeId);
       final existingMap = existing is Map ? existing : null;
 
@@ -107,7 +107,9 @@ class PlayerRepositoryImpl implements PlayerRepository {
       final posMs = position.inMilliseconds;
       final posSec = position.inSeconds;
 
+      final deletedBox = AccountSession.instance.box('history_deleted');
       await box.put(animeId, {
+        'revision': ((existingMap?['revision'] as num?)?.toInt() ?? 0) + 1,
         'animeId': animeId,
         'animeName': effectiveTitle,
         'poster': effectivePoster,
@@ -128,7 +130,7 @@ class PlayerRepositoryImpl implements PlayerRepository {
 
       // Watching again revives a previously removed history item
       try {
-        await Hive.box('history_deleted').delete(animeId);
+        await deletedBox.delete(animeId);
       } catch (_) {}
     } catch (_) {
       // Local history save is best-effort

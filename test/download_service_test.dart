@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:calium_stream/features/anime_details/domain/entities/episode_entity.dart';
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
 import 'package:calium_stream/features/downloads/presentation/views/downloads_screen.dart';
 import 'package:calium_stream/features/downloads/presentation/widgets/download_options_sheet.dart';
@@ -451,6 +452,77 @@ void main() {
     final button = find.text('Bölümü indir • 2160p');
     await tester.ensureVisible(button);
     expect(button.hitTestable(), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+
+  testWidgets('selected episode sheet offers only the batch download', (
+    tester,
+  ) async {
+    GetIt.I.registerSingleton<GetVideoSourcesUseCase>(
+      _Sources(
+        Future.value(
+          Right(
+            EpisodeSourceEntity(
+              audioGroups: [
+                AudioGroupEntity(
+                  name: 'Türkçe Dublaj',
+                  group: 'tr',
+                  streams: [
+                    VideoStreamItemEntity(
+                      quality: '1080p',
+                      url: 'https://example.invalid/video.mp4',
+                    ),
+                  ],
+                ),
+              ],
+              subtitles: const [],
+            ),
+          ),
+        ),
+      ),
+    );
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: DownloadOptionsSheet(
+            animeId: 'test',
+            animeTitle: 'Uzun bir anime başlığı',
+            episodeTitle: '3 bölüm seçildi',
+            episodeNumber: 1,
+            seasonNumber: 1,
+            posterUrl: '',
+            selectionMode: true,
+            allSeasonEpisodes: [
+              for (var i = 1; i <= 3; i++)
+                EpisodeEntity(
+                  id: '$i',
+                  animeId: 'test',
+                  episodeNumber: i,
+                  seasonNumber: 1,
+                  title: 'Bölüm $i',
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('Bölümü indir'), findsNothing);
+    final batch = find.text('Seçilenleri indir (3 bölüm)');
+    await tester.ensureVisible(batch);
+    expect(batch.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();

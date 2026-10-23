@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:calium_stream/core/constants/storage_keys.dart';
@@ -22,11 +23,15 @@ class AuthRepositoryImpl implements AuthRepository {
     required String email,
     required String password,
   }) async {
+    final sessionState = AccountSession.instance;
+    final generation = sessionState.invalidate();
     try {
       final (user, token) = await _remoteDataSource.login(
         email: email,
         password: password,
       );
+      if (generation != sessionState.generation) throw StateError('Account changed');
+      if (token.isEmpty) throw StateError('Missing session token');
       if (token.isNotEmpty) {
         await _secureStorage.write(
           key: StorageKeys.authToken,
@@ -37,12 +42,16 @@ class AuthRepositoryImpl implements AuthRepository {
         key: StorageKeys.currentUser,
         value: user.username,
       );
+      if (!await sessionState.activate(user.id, generation)) throw StateError('Account changed');
       return Right(user);
     } on ServerException catch (e) {
+      await sessionState.activate(null, generation);
       return Left(ServerFailure(message: e.message));
     } on NetworkException catch (e) {
+      await sessionState.activate(null, generation);
       return Left(NetworkFailure(message: e.message));
     } catch (e) {
+      await sessionState.activate(null, generation);
       return Left(ServerFailure(message: e.toString()));
     }
   }
@@ -53,12 +62,16 @@ class AuthRepositoryImpl implements AuthRepository {
     required String username,
     required String password,
   }) async {
+    final sessionState = AccountSession.instance;
+    final generation = sessionState.invalidate();
     try {
       final (user, token) = await _remoteDataSource.register(
         email: email,
         username: username,
         password: password,
       );
+      if (generation != sessionState.generation) throw StateError('Account changed');
+      if (token.isEmpty) throw StateError('Missing session token');
       if (token.isNotEmpty) {
         await _secureStorage.write(
           key: StorageKeys.authToken,
@@ -69,50 +82,63 @@ class AuthRepositoryImpl implements AuthRepository {
         key: StorageKeys.currentUser,
         value: user.username,
       );
+      if (!await sessionState.activate(user.id, generation)) throw StateError('Account changed');
       return Right(user);
     } on ServerException catch (e) {
+      await sessionState.activate(null, generation);
       return Left(ServerFailure(message: e.message));
     } on NetworkException catch (e) {
+      await sessionState.activate(null, generation);
       return Left(NetworkFailure(message: e.message));
     } catch (e) {
+      await sessionState.activate(null, generation);
       return Left(ServerFailure(message: e.toString()));
     }
   }
 
   @override
   Future<Either<Failure, UserEntity>> getCurrentUser() async {
+    final sessionState = AccountSession.instance;
+    final generation = sessionState.generation;
     try {
       final token = await _secureStorage.read(key: StorageKeys.authToken);
       if (token == null || token.isEmpty) {
         return const Left(AuthFailure(message: 'Oturum bulunamadı'));
       }
       final user = await _remoteDataSource.getCurrentUser();
+      if (generation != sessionState.generation) throw StateError('Account changed');
       await _secureStorage.write(
         key: StorageKeys.currentUser,
         value: user.username,
       );
+      if (!await sessionState.activate(user.id, generation)) throw StateError('Account changed');
       return Right(user);
     } on ServerException catch (e) {
+      await sessionState.activate(null, generation);
       return Left(ServerFailure(message: e.message));
     } on NetworkException catch (e) {
+      await sessionState.activate(null, generation);
       return Left(NetworkFailure(message: e.message));
     } catch (e) {
+      await sessionState.activate(null, generation);
       return Left(AuthFailure(message: e.toString()));
     }
   }
 
   @override
   Future<Either<Failure, void>> logout() async {
+    final session = AccountSession.instance;
+    final generation = session.invalidate();
     try {
       await _remoteDataSource.logout();
-      await _secureStorage.delete(key: StorageKeys.authToken);
-      await _secureStorage.delete(key: StorageKeys.currentUser);
-      return const Right(null);
-    } catch (e) {
-      await _secureStorage.delete(key: StorageKeys.authToken);
-      await _secureStorage.delete(key: StorageKeys.currentUser);
-      return const Right(null);
+    } finally {
+      if (generation == session.generation) {
+        await _secureStorage.delete(key: StorageKeys.authToken);
+        await _secureStorage.delete(key: StorageKeys.currentUser);
+        await session.activate(null, generation);
+      }
     }
+    return const Right(null);
   }
 
   @override
@@ -120,6 +146,8 @@ class AuthRepositoryImpl implements AuthRepository {
     required String provider,
     required Future<void> Function(String url) onOpenUrl,
   }) async {
+    final sessionState = AccountSession.instance;
+    final generation = sessionState.invalidate();
     try {
       final session = await _remoteDataSource.startOAuth(
         provider: provider,
@@ -130,6 +158,8 @@ class AuthRepositoryImpl implements AuthRepository {
         transactionId: session.transactionId,
         verifier: session.verifier,
       );
+      if (generation != sessionState.generation) throw StateError('Account changed');
+      if (token.isEmpty) throw StateError('Missing session token');
       if (token.isNotEmpty) {
         await _secureStorage.write(
           key: StorageKeys.authToken,
@@ -140,12 +170,16 @@ class AuthRepositoryImpl implements AuthRepository {
         key: StorageKeys.currentUser,
         value: user.username,
       );
+      if (!await sessionState.activate(user.id, generation)) throw StateError('Account changed');
       return Right(user);
     } on ServerException catch (e) {
+      await sessionState.activate(null, generation);
       return Left(ServerFailure(message: e.message));
     } on NetworkException catch (e) {
+      await sessionState.activate(null, generation);
       return Left(NetworkFailure(message: e.message));
     } catch (e) {
+      await sessionState.activate(null, generation);
       return Left(ServerFailure(message: e.toString()));
     }
   }

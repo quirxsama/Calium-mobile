@@ -1,6 +1,7 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:calium_stream/app/router.dart';
 
 class NotificationService {
   NotificationService._();
@@ -29,6 +30,7 @@ class NotificationService {
       initSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
         debugPrint('🔔 Notification tapped: ${response.payload}');
+        handlePayload(response.payload);
       },
     );
 
@@ -76,7 +78,36 @@ class NotificationService {
     // Request notification permission
     await requestPermission();
 
+    final launchDetails =
+        await _notificationsPlugin.getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp ?? false) {
+      final payload = launchDetails?.notificationResponse?.payload;
+      if (payload != null && payload.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          handlePayload(payload);
+        });
+      }
+    }
+
     _initialized = true;
+  }
+
+  static void handlePayload(String? payload) {
+    if (payload == null || payload.isEmpty) return;
+    try {
+      if (payload.startsWith('anime:')) {
+        final animeId = payload.substring('anime:'.length);
+        AppRouter.router.push('/anime/$animeId');
+      } else if (payload.startsWith('watch:')) {
+        AppRouter.router.push(payload.substring('watch:'.length));
+      } else if (payload.startsWith('social:')) {
+        AppRouter.router.push('/social');
+      } else if (payload.startsWith('/')) {
+        AppRouter.router.push(payload);
+      }
+    } catch (e) {
+      debugPrint('⚠️ Notification navigation error: $e');
+    }
   }
 
   Future<bool> requestPermission() async {
@@ -93,24 +124,39 @@ class NotificationService {
     required int id,
     required String animeTitle,
     required String episodeNumber,
+    String? seasonNumber,
     String? animeId,
+    String? posterUrl,
   }) async {
     try {
-      const androidDetails = AndroidNotificationDetails(
+      final seasonPrefix = seasonNumber != null &&
+              seasonNumber.isNotEmpty &&
+              seasonNumber != '1'
+          ? 'Sezon $seasonNumber '
+          : '';
+      final bodyText =
+          '$animeTitle - ${seasonPrefix}Bölüm $episodeNumber yayında. Hemen izle!';
+
+      final androidDetails = AndroidNotificationDetails(
         _channelEpisodesId,
         _channelEpisodesName,
         importance: Importance.max,
         priority: Priority.high,
         showWhen: true,
         icon: '@mipmap/ic_launcher',
+        styleInformation: BigTextStyleInformation(
+          bodyText,
+          contentTitle: '🔥 Yeni Bölüm: $animeTitle',
+          summaryText: '${seasonPrefix}Bölüm $episodeNumber',
+        ),
       );
 
-      const details = NotificationDetails(android: androidDetails);
+      final details = NotificationDetails(android: androidDetails);
 
       await _notificationsPlugin.show(
         id,
-        '🔥 Yeni Bölüm Yayında!',
-        '$animeTitle - Bölüm $episodeNumber yayına girdi. Hemen izle!',
+        '🔥 Yeni Bölüm: $animeTitle',
+        bodyText,
         details,
         payload: animeId != null ? 'anime:$animeId' : null,
       );

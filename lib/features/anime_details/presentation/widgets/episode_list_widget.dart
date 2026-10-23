@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/utils/episode_utils.dart';
@@ -37,12 +38,53 @@ class EpisodeListWidget extends StatefulWidget {
 class _EpisodeListWidgetState extends State<EpisodeListWidget> {
   final _search = TextEditingController();
   bool _reversed = false;
+  bool _selecting = false;
+  final Set<int> _selected = {};
   int _visible = 25;
 
   @override
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  void _toggleSelection(EpisodeEntity episode) {
+    setState(() {
+      if (!_selected.add(episode.episodeNumber)) {
+        _selected.remove(episode.episodeNumber);
+      }
+    });
+  }
+
+  void _exitSelection() {
+    setState(() {
+      _selecting = false;
+      _selected.clear();
+    });
+  }
+
+  Future<void> _downloadSelected() async {
+    final selected = widget.episodes
+        .where((episode) => _selected.contains(episode.episodeNumber))
+        .toList();
+    if (selected.isEmpty) return;
+
+    final started = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => DownloadOptionsSheet(
+        animeId: widget.animeId,
+        animeTitle: widget.animeTitle,
+        episodeTitle: '${selected.length} bölüm seçildi',
+        episodeNumber: selected.first.episodeNumber,
+        seasonNumber: widget.selectedSeason,
+        posterUrl: widget.posterUrl,
+        allSeasonEpisodes: selected,
+        selectionMode: true,
+      ),
+    );
+    if (started == true && mounted) _exitSelection();
   }
 
   @override
@@ -60,7 +102,7 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
     if (_reversed) filtered = filtered.reversed.toList();
     final visible = filtered.take(_visible).toList();
     return ValueListenableBuilder(
-      valueListenable: Hive.box('history').listenable(),
+      valueListenable: AccountSession.instance.box('history').listenable(),
       builder: (context, Box box, _) {
         final rawHistory = box.get(widget.animeId);
         final history = rawHistory is Map ? rawHistory : const {};
@@ -91,6 +133,8 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
                               setState(() {
                                 _visible = 25;
                                 _search.clear();
+                                _selecting = false;
+                                _selected.clear();
                               });
                               widget.onSeasonChanged(season.seasonNumber);
                             }
@@ -122,23 +166,24 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton.filledTonal(
-                  tooltip: _reversed
-                      ? 'İlk bölümden sırala'
-                      : 'Son bölümden sırala',
-                  onPressed: () => setState(() => _reversed = !_reversed),
-                  icon: Icon(
-                    _reversed
-                        ? Icons.arrow_upward_rounded
-                        : Icons.arrow_downward_rounded,
+                if (!_selecting)
+                  IconButton.filledTonal(
+                    tooltip: _reversed
+                        ? 'İlk bölümden sırala'
+                        : 'Son bölümden sırala',
+                    onPressed: () => setState(() => _reversed = !_reversed),
+                    icon: Icon(
+                      _reversed
+                          ? Icons.arrow_upward_rounded
+                          : Icons.arrow_downward_rounded,
+                    ),
                   ),
-                ),
-                if (widget.episodes.isNotEmpty) ...[
+                if (!_selecting && widget.episodes.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   IconButton.filledTonal(
                     tooltip: '${widget.selectedSeason}. sezonu indir',
                     icon: const Icon(Icons.download_rounded),
-                    onPressed: () => showModalBottomSheet(
+                    onPressed: () => showModalBottomSheet<bool>(
                       context: context,
                       isScrollControlled: true,
                       backgroundColor: Colors.transparent,
@@ -154,8 +199,61 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
                     ),
                   ),
                 ],
+                if (widget.episodes.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    tooltip: _selecting ? 'Seçimi kapat' : 'Toplu indirme seç',
+                    onPressed: _selecting
+                        ? _exitSelection
+                        : () => setState(() => _selecting = true),
+                    icon: Icon(
+                      _selecting ? Icons.close_rounded : Icons.checklist_rounded,
+                    ),
+                  ),
+                ],
               ],
             ),
+            if (_selecting) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_selected.length} bölüm seçildi',
+                      style: AppTypography.titleSmall.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Flexible(
+                    child: TextButton(
+                      onPressed: () => setState(() {
+                        if (_selected.length == widget.episodes.length) {
+                          _selected.clear();
+                        } else {
+                          _selected.addAll(
+                            widget.episodes.map((e) => e.episodeNumber),
+                          );
+                        }
+                      }),
+                      child: Text(
+                        _selected.length == widget.episodes.length
+                            ? 'Seçimi kaldır'
+                            : 'Tümünü seç',
+                        textAlign: TextAlign.end,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: _selected.isEmpty ? null : _downloadSelected,
+                icon: const Icon(Icons.download_rounded),
+                label: Text('Seçilenleri indir (${_selected.length})'),
+              ),
+            ],
             const SizedBox(height: 16),
             if (visible.isEmpty)
               Padding(
@@ -185,6 +283,7 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
   }
 
   Widget _episodeTile(EpisodeEntity episode, Map history) {
+    final selected = _selected.contains(episode.episodeNumber);
     final current =
         history['seasonNumber'] == widget.selectedSeason &&
         history['episodeNumber'] == episode.episodeNumber;
@@ -201,14 +300,18 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
       title: episode.title,
     );
     return Material(
-      color: AppColors.surfaceDark,
+      color: selected ? AppColors.primary.withAlpha(20) : AppColors.surfaceDark,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: current ? AppColors.primary : AppColors.border),
+        side: BorderSide(
+          color: selected || current ? AppColors.primary : AppColors.border,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => widget.onEpisodeTap(episode),
+        onTap: _selecting
+            ? () => _toggleSelection(episode)
+            : () => widget.onEpisodeTap(episode),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: LayoutBuilder(
@@ -223,10 +326,15 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
                 children: [
                   Semantics(
                     button: true,
-                    label: '$label oynat',
+                    selected: selected,
+                    label: _selecting ? '$label seç' : '$label oynat',
                     child: InkWell(
-                      onTap: () =>
-                          (widget.onDirectPlay ?? widget.onEpisodeTap)(episode),
+                      onTap: _selecting
+                          ? () => _toggleSelection(episode)
+                          : () =>
+                                (widget.onDirectPlay ?? widget.onEpisodeTap)(
+                                  episode,
+                                ),
                       child: SizedBox(
                         width: thumbnailWidth,
                         height: thumbnailWidth * .68,
@@ -310,6 +418,11 @@ class _EpisodeListWidgetState extends State<EpisodeListWidget> {
                       ],
                     ),
                   ),
+                  if (_selecting)
+                    Checkbox(
+                      value: selected,
+                      onChanged: (_) => _toggleSelection(episode),
+                    ),
                 ],
               );
             },

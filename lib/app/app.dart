@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 
@@ -19,7 +20,10 @@ class CaliumApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
+    return ListenableBuilder(
+      listenable: AccountSession.instance,
+      builder: (context, _) => MultiBlocProvider(
+      key: ValueKey(AccountSession.instance.generation),
       providers: [
         BlocProvider<AuthBloc>(
           create: (_) => GetIt.I<AuthBloc>()..add(CheckAuthRequested()),
@@ -46,6 +50,6 @@ class CaliumApp extends StatelessWidget {
         theme: AppTheme.darkTheme(),
         routerConfig: AppRouter.router,
       ),
-    );
+    ));
   }
 }

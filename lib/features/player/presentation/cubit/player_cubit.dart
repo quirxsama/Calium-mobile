@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:calium_stream/core/error/failures.dart';
+import 'package:calium_stream/core/services/app_preferences.dart';
 
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
 import 'package:calium_stream/features/player/domain/entities/intro_song_entity.dart';
@@ -103,6 +104,35 @@ class PlayerCubit extends Cubit<PlayerState> {
     } on FileSystemException {
       return false;
     }
+  }
+
+  bool _matchesAudioPreference(AudioGroupEntity group, String preference) {
+    final name = group.name.toLowerCase();
+    switch (preference) {
+      case 'tr':
+        return group.group == 'tr' ||
+            group.group == 'turkish' ||
+            name.contains('türk') ||
+            name.contains('turk');
+      case 'en':
+        return group.group == 'en' ||
+            group.group == 'english' ||
+            name.contains('ngiliz') ||
+            name.contains('english');
+      default:
+        return group.group == 'original' ||
+            group.group == 'ja' ||
+            group.group == 'jp' ||
+            name.contains('japon') ||
+            name.contains('orijinal') ||
+            name.contains('original');
+    }
+  }
+
+  bool _matchesQuality(String streamQuality, String preferredQuality) {
+    final preferred = preferredQuality.replaceAll(RegExp(r'[^0-9]'), '');
+    final actual = streamQuality.replaceAll(RegExp(r'[^0-9]'), '');
+    return preferred.isNotEmpty && preferred == actual;
   }
 
   Future<void> loadVideoSources({
@@ -280,10 +310,14 @@ class PlayerCubit extends Cubit<PlayerState> {
             return;
           }
 
-          // Prefer original (Japanese) or first available
+          // Prefer the saved default audio group, then original, then first.
+          final preferredAudio = AppPreferences.instance.defaultAudio;
           final initialAudio = availableGroups.firstWhere(
-            (g) => g.group == 'original' || g.name.contains('Japonca'),
-            orElse: () => availableGroups.first,
+            (g) => _matchesAudioPreference(g, preferredAudio),
+            orElse: () => availableGroups.firstWhere(
+              (g) => _matchesAudioPreference(g, 'original'),
+              orElse: () => availableGroups.first,
+            ),
           );
 
           if (initialAudio.streams.isEmpty) {
@@ -295,10 +329,14 @@ class PlayerCubit extends Cubit<PlayerState> {
             return;
           }
 
-          // Prefer 1080p or highest available stream
+          // Prefer the saved default quality, then 1080p, then highest.
+          final preferredQuality = AppPreferences.instance.defaultQuality;
           final initialStream = initialAudio.streams.firstWhere(
-            (s) => s.quality == '1080p',
-            orElse: () => initialAudio.streams.first,
+            (s) => _matchesQuality(s.quality, preferredQuality),
+            orElse: () => initialAudio.streams.firstWhere(
+              (s) => s.quality == '1080p',
+              orElse: () => initialAudio.streams.first,
+            ),
           );
 
           // Default to Turkish subtitle if available

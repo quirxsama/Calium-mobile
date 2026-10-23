@@ -1,5 +1,5 @@
 import 'package:hive_flutter/hive_flutter.dart';
-
+import 'package:calium_stream/core/services/account_session.dart';
 import 'package:calium_stream/features/library/data/models/favorite_model.dart';
 import 'package:calium_stream/features/library/data/models/history_model.dart';
 
@@ -16,119 +16,91 @@ abstract class LibraryLocalDataSource {
 }
 
 class LibraryLocalDataSourceImpl implements LibraryLocalDataSource {
-  Box get _favBox => Hive.box('favorites');
-  Box get _histBox => Hive.box('history');
-  Box get _favDeletedBox => Hive.box('favorites_deleted');
+  Box get _favBox => AccountSession.instance.box('favorites');
+  Box get _histBox => AccountSession.instance.box('history');
+  Box get _favDeletedBox => AccountSession.instance.box('favorites_deleted');
 
   @override
   Future<List<FavoriteModel>> getFavorites() async {
-    final list = <FavoriteModel>[];
-    for (final key in _favBox.keys) {
-      final data = _favBox.get(key);
-      if (data is Map) {
-        list.add(FavoriteModel.fromJson(Map<String, dynamic>.from(data)));
-      }
-    }
+    final list = _favBox.values.whereType<Map>().map((data) => FavoriteModel.fromJson(Map<String, dynamic>.from(data))).toList();
     list.sort((a, b) => b.addedAt.compareTo(a.addedAt));
     return list;
   }
 
   @override
   Future<bool> toggleFavorite(FavoriteModel favorite) async {
-    if (_favBox.containsKey(favorite.animeId)) {
-      await _favBox.delete(favorite.animeId);
-      try {
-        await _favDeletedBox.put(
-          favorite.animeId,
-          DateTime.now().millisecondsSinceEpoch,
-        );
-      } catch (_) {}
+    final box = _favBox;
+    final deleted = _favDeletedBox;
+    if (box.containsKey(favorite.animeId)) {
+      await deleted.put(favorite.animeId, DateTime.now().millisecondsSinceEpoch);
+      await box.delete(favorite.animeId);
       return false;
-    } else {
-      try {
-        await _favDeletedBox.delete(favorite.animeId);
-      } catch (_) {}
-      await _favBox.put(favorite.animeId, favorite.toJson());
-      return true;
     }
+    await deleted.delete(favorite.animeId);
+    await box.put(favorite.animeId, favorite.toJson());
+    return true;
   }
 
   @override
-  Future<bool> isFavorite(String animeId) async {
-    return _favBox.containsKey(animeId);
-  }
+  Future<bool> isFavorite(String animeId) async => _favBox.containsKey(animeId);
 
   @override
   Future<void> saveFavoritesBulk(List<FavoriteModel> favorites) async {
+    final box = _favBox;
+    final deleted = _favDeletedBox;
     for (final f in favorites) {
-      // If locally marked as deleted, do not resurrect from cloud
-      if (_favDeletedBox.containsKey(f.animeId)) continue;
-      await _favBox.put(f.animeId, f.toJson());
+      if (deleted.containsKey(f.animeId)) continue;
+      await box.put(f.animeId, f.toJson());
     }
   }
 
   @override
   Future<List<HistoryModel>> getHistory() async {
-    final list = <HistoryModel>[];
-    for (final key in _histBox.keys) {
-      final data = _histBox.get(key);
-      if (data is Map) {
-        list.add(HistoryModel.fromJson(Map<String, dynamic>.from(data)));
-      }
-    }
+    final list = _histBox.values.whereType<Map>().map((data) => HistoryModel.fromJson(Map<String, dynamic>.from(data))).toList();
     list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return list;
   }
 
   @override
   Future<void> saveHistory(HistoryModel history) async {
-    await _clearTombstone(history.animeId);
-    await _histBox.put(history.animeId, history.toJson());
+    final box = _histBox;
+    final deleted = AccountSession.instance.box('history_deleted');
+    final existing = box.get(history.animeId);
+    await deleted.delete(history.animeId);
+    await box.put(history.animeId, {
+      ...history.toJson(),
+      'dirty': true,
+      'revision': ((existing is Map ? existing['revision'] as num? : null)?.toInt() ?? 0) + 1,
+    });
   }
 
   @override
   Future<void> saveHistoryBulk(List<HistoryModel> history) async {
+    final box = _histBox;
+    final deleted = AccountSession.instance.box('history_deleted');
     for (final h in history) {
-      final existing = _histBox.get(h.animeId);
-      if (existing is Map) {
-        final localUpdated = (existing['updatedAt'] is num)
-            ? (existing['updatedAt'] as num).toInt()
-            : 0;
-        final incoming = h.updatedAt.millisecondsSinceEpoch;
-        // Cloud data must not roll back newer local progress
-        if (localUpdated > 0 && incoming < localUpdated) continue;
-      }
+      if (deleted.containsKey(h.animeId)) continue;
+      final existing = box.get(h.animeId);
+      if (existing is Map && (existing['dirty'] == true || ((existing['updatedAt'] as num?)?.toInt() ?? 0) >= h.updatedAt.millisecondsSinceEpoch)) continue;
       final json = h.toJson();
-      // Preserve episode thumbnail captured during local playback if incoming is empty
-      if (existing is Map && existing['episodeThumb'] != null && (json['episodeThumb'] == null || (json['episodeThumb'] as String).isEmpty)) {
-        json['episodeThumb'] = existing['episodeThumb'];
-      }
-      await _histBox.put(h.animeId, json);
+      if (existing is Map && h.episodeThumb.isEmpty) json['episodeThumb'] = existing['episodeThumb'];
+      await box.put(h.animeId, json);
     }
-  }
-
-  Future<void> _clearTombstone(String animeId) async {
-    try {
-      final deletedBox = Hive.box('history_deleted');
-      await deletedBox.delete(animeId);
-    } catch (_) {}
   }
 
   @override
   Future<void> deleteHistoryItem(String animeId) async {
-    await _histBox.delete(animeId);
-    // Tombstone prevents cloud sync from re-adding the removed item
-    try {
-      final deletedBox = Hive.box('history_deleted');
-      await deletedBox.put(animeId, DateTime.now().millisecondsSinceEpoch);
-    } catch (_) {}
+    final box = _histBox;
+    final deleted = AccountSession.instance.box('history_deleted');
+    await deleted.put(animeId, DateTime.now().millisecondsSinceEpoch);
+    await box.delete(animeId);
   }
 
   @override
   Future<void> clearHistory() async {
-    await _histBox.clear();
-    try {
-      await Hive.box('history_deleted').clear();
-    } catch (_) {}
+    final box = _histBox;
+    final deleted = AccountSession.instance.box('history_deleted');
+    await deleted.putAll({for (final key in box.keys) key: DateTime.now().millisecondsSinceEpoch});
+    await box.clear();
   }
 }

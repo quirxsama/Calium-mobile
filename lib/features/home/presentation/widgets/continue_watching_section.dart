@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
@@ -20,7 +21,7 @@ class ContinueWatchingSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder(
-      valueListenable: Hive.box('history').listenable(),
+      valueListenable: AccountSession.instance.box('history').listenable(),
       builder: (context, Box box, _) {
         // Collect watch history entries from Hive
         final List<Map<String, dynamic>> historyItems = [];

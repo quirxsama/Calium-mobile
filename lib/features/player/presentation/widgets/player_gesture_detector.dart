@@ -20,6 +20,8 @@ class PlayerGestureDetector extends StatefulWidget {
     required this.onLongPressEnd,
     required this.onBrightnessChanged,
     required this.onVolumeChanged,
+    this.enableBrightness = true,
+    this.enableVolume = true,
     this.initialBrightness = 1.0,
     this.initialVolume = 100.0,
     super.key,
@@ -37,6 +39,8 @@ class PlayerGestureDetector extends StatefulWidget {
   final VoidCallback onLongPressEnd;
   final ValueChanged<double> onBrightnessChanged;
   final ValueChanged<double> onVolumeChanged;
+  final bool enableBrightness;
+  final bool enableVolume;
   final double initialBrightness;
   final double initialVolume;
 
@@ -182,8 +186,11 @@ class _PlayerGestureDetectorState extends State<PlayerGestureDetector> {
     // Detect vertical gesture direction only (brightness on left, volume on right)
     if (!_isDragging) {
       if (dy.abs() > 20 && dy.abs() > dx.abs()) {
-        _isDragging = true;
         final isLeft = _dragStartOffset.dx < (constraints.maxWidth / 2);
+        if (isLeft ? !widget.enableBrightness : !widget.enableVolume) {
+          return;
+        }
+        _isDragging = true;
         _activeGesture = isLeft ? ActiveGestureType.brightness : ActiveGestureType.volume;
       }
     }

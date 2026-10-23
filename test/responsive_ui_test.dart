@@ -10,6 +10,7 @@ import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:dartz/dartz.dart' show Either, Right;
 import 'package:calium_stream/core/error/failures.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_theme.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
@@ -179,8 +180,10 @@ void main() {
     AppTypography.caption = body.copyWith(fontSize: 12);
     storage = await Directory.systemTemp.createTemp('calium-ui-');
     Hive.init(storage.path);
-    await Hive.openBox('history');
-    await Hive.openBox('favorites');
+    await AccountSession.instance.activate(
+      null,
+      AccountSession.instance.generation,
+    );
   });
   tearDownAll(() async {
     await Hive.close();

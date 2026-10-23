@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
+import 'package:calium_stream/core/utils/navigation_utils.dart';
 import 'package:calium_stream/core/widgets/anime_poster_card.dart';
 import 'package:calium_stream/core/widgets/adaptive_poster_grid.dart';
 import 'package:calium_stream/core/widgets/app_content_frame.dart';
@@ -174,7 +175,7 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
             color: Colors.white,
             size: 20,
           ),
-          onPressed: () => context.pop(),
+          onPressed: () => goBackOrHome(context),
         ),
         title: Text(
           _list?.name ?? 'Liste Detayı',

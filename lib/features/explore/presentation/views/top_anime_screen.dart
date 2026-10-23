@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
+import 'package:calium_stream/core/utils/navigation_utils.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/features/home/domain/entities/anime_entity.dart';
 import 'package:calium_stream/features/home/domain/repositories/home_repository.dart';
@@ -56,7 +57,7 @@ class _TopAnimeScreenState extends State<TopAnimeScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-          onPressed: () => context.pop(),
+          onPressed: () => goBackOrHome(context),
         ),
         title: Text(
           'Top 10 Sıralaması',

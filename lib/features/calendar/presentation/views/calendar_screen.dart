@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
+import 'package:calium_stream/core/utils/navigation_utils.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/features/calendar/domain/entities/calendar_day_entity.dart';
 import 'package:calium_stream/features/calendar/presentation/bloc/calendar_bloc.dart';
@@ -152,7 +153,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             color: Colors.white,
             size: 20,
           ),
-          onPressed: () => context.pop(),
+          onPressed: () => goBackOrHome(context),
         ),
         title: Text(
           'Yayın Takvimi',

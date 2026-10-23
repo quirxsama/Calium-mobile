@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import 'precision_seek_bar.dart';
+
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
@@ -23,6 +26,7 @@ class PlayerControlsHUD extends StatefulWidget {
     required this.onSeekForward,
     required this.onSeekBackward,
     required this.onSeek,
+    this.onPreviewSeek,
     this.onSeekStart,
     this.onSeekEnd,
     required this.onBack,
@@ -56,6 +60,7 @@ class PlayerControlsHUD extends StatefulWidget {
   final VoidCallback onSeekForward;
   final VoidCallback onSeekBackward;
   final ValueChanged<Duration> onSeek;
+  final ValueChanged<Duration>? onPreviewSeek;
   final VoidCallback? onSeekStart;
   final VoidCallback? onSeekEnd;
   final VoidCallback onBack;
@@ -75,9 +80,6 @@ class PlayerControlsHUD extends StatefulWidget {
 }
 
 class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
-  bool _isSeeking = false;
-  double _localSeekPosition = 0.0;
-
   @override
   Widget build(BuildContext context) {
     final maxDurationMs = widget.duration.inMilliseconds > 0
@@ -144,9 +146,11 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
             stops: const [0.0, 0.45, 1.0],
           ),
         ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xl,
-          vertical: AppSpacing.md,
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.md,
+          AppSpacing.xl,
+          24,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -397,15 +401,10 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
     Duration currentPos,
     double maxDurationMs,
   ) {
-    final currentPosMs = currentPos.inMilliseconds.toDouble().clamp(
-      0.0,
-      maxDurationMs,
-    );
-    final displayTimeStr = _isSeeking
-        ? Duration(milliseconds: _localSeekPosition.toInt()).toMinSecString()
-        : currentPos.toMinSecString();
-
-    final sliderValue = _isSeeking ? _localSeekPosition : currentPosMs;
+    final displayTimeStr = clampPlayerSeek(
+      currentPos,
+      widget.duration,
+    ).toMinSecString();
 
     return Row(
       children: [
@@ -418,43 +417,15 @@ class _PlayerControlsHUDState extends State<PlayerControlsHUD> {
         ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
-          child: SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 4,
-              trackShape: const RoundedRectSliderTrackShape(),
-              thumbShape: const RoundSliderThumbShape(
-                enabledThumbRadius: 8,
-                pressedElevation: 6,
-              ),
-              activeTrackColor: AppColors.primary,
-              inactiveTrackColor: Colors.white24,
-              thumbColor: AppColors.primary,
-              overlayColor: AppColors.primaryGlow,
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 18),
-            ),
-            child: Slider(
-              value: sliderValue,
-              max: maxDurationMs,
-              onChangeStart: (val) {
-                setState(() {
-                  _isSeeking = true;
-                  _localSeekPosition = val;
-                });
-                widget.onSeekStart?.call();
-              },
-              onChanged: (val) {
-                setState(() {
-                  _localSeekPosition = val;
-                });
-              },
-              onChangeEnd: (val) {
-                widget.onSeek(Duration(milliseconds: val.toInt()));
-                setState(() {
-                  _isSeeking = false;
-                });
-                widget.onSeekEnd?.call();
-              },
-            ),
+          child: PrecisionSeekBar(
+            position: currentPos,
+            duration: widget.duration,
+            buffered: widget.buffered,
+            enabled: !widget.isLocked,
+            onSeek: widget.onSeek,
+            onPreviewSeek: widget.onPreviewSeek,
+            onSeekStart: widget.onSeekStart,
+            onSeekEnd: widget.onSeekEnd,
           ),
         ),
         const SizedBox(width: AppSpacing.sm),

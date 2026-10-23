@@ -1,301 +1,221 @@
-import 'dart:convert';
+import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-
-import 'package:calium_stream/core/constants/api_constants.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 import 'package:calium_stream/core/network/dio_client.dart';
 import 'package:calium_stream/features/auth/data/datasources/auth_remote_datasource.dart';
 
 class TrackingService extends ChangeNotifier {
   TrackingService._();
   static final TrackingService instance = TrackingService._();
-
-  static const String _boxName = 'tracking_integrations';
-  static const String _autoScrobbleKey = 'auto_scrobble';
-  static const String _cachedIntegrationsKey = 'cached_integrations_v2';
-
   bool _initialized = false;
   bool _autoScrobble = true;
   bool _isSyncing = false;
-
-  bool _isAniListConnected = false;
-  String? _aniListUsername;
-  String? _aniListStatus;
-  DateTime? _aniListLastSyncedAt;
-  String? _aniListError;
-
-  bool _isMalConnected = false;
-  String? _malUsername;
-  String? _malStatus;
-  DateTime? _malLastSyncedAt;
-  String? _malError;
-
+  int _fetchRevision = 0;
+  List<Map<String, dynamic>> _connections = [];
   List<Map<String, dynamic>> _entries = [];
   List<Map<String, dynamic>> _conflicts = [];
+  final Set<String> _writing = {};
+  String? lastError;
+  final _session = AccountSession.instance;
 
-  bool get isAniListConnected => _isAniListConnected;
-  bool get isMalConnected => _isMalConnected;
-  String? get aniListUsername => _aniListUsername;
-  String? get malUsername => _malUsername;
-  String? get aniListStatus => _aniListStatus;
-  String? get malStatus => _malStatus;
-  DateTime? get aniListLastSyncedAt => _aniListLastSyncedAt;
-  DateTime? get malLastSyncedAt => _malLastSyncedAt;
-  String? get aniListError => _aniListError;
-  String? get malError => _malError;
-
-  Map<String, dynamic>? get aniListUser => _isAniListConnected
-      ? {
-          'name': _aniListUsername ?? '',
-          'status': _aniListStatus,
-          'lastSyncedAt': _aniListLastSyncedAt?.toIso8601String(),
-        }
-      : null;
-
-  Map<String, dynamic>? get malUser => _isMalConnected
-      ? {
-          'name': _malUsername ?? '',
-          'status': _malStatus,
-          'lastSyncedAt': _malLastSyncedAt?.toIso8601String(),
-        }
-      : null;
-
+  Map<String, dynamic> _connection(String provider) => _connections.firstWhere((c) => c['provider'] == provider, orElse: () => {});
+  bool get isAniListConnected => _connection('anilist')['connected'] == true;
+  bool get isMalConnected => _connection('mal')['connected'] == true;
+  String? get aniListUsername => _connection('anilist')['username'] as String?;
+  String? get malUsername => _connection('mal')['username'] as String?;
+  String? get aniListStatus => _connection('anilist')['status'] as String?;
+  String? get malStatus => _connection('mal')['status'] as String?;
+  String? get aniListError => _connection('anilist')['error'] as String?;
+  String? get malError => _connection('mal')['error'] as String?;
+  DateTime? get aniListLastSyncedAt => DateTime.tryParse(_connection('anilist')['lastSyncedAt']?.toString() ?? '');
+  DateTime? get malLastSyncedAt => DateTime.tryParse(_connection('mal')['lastSyncedAt']?.toString() ?? '');
+  Map<String, dynamic>? get aniListUser => isAniListConnected ? {'name': aniListUsername ?? '', 'status': aniListStatus, 'lastSyncedAt': aniListLastSyncedAt?.toIso8601String()} : null;
+  Map<String, dynamic>? get malUser => isMalConnected ? {'name': malUsername ?? '', 'status': malStatus, 'lastSyncedAt': malLastSyncedAt?.toIso8601String()} : null;
   bool get autoScrobble => _autoScrobble;
   bool get isSyncing => _isSyncing;
-  List<Map<String, dynamic>> get entries => _entries;
-  List<Map<String, dynamic>> get conflicts => _conflicts;
+  List<Map<String, dynamic>> get entries => List.unmodifiable(_entries.map(Map<String, dynamic>.unmodifiable));
+  List<Map<String, dynamic>> get conflicts => List.unmodifiable(_conflicts.map(Map<String, dynamic>.unmodifiable));
+  bool _current(int generation) => _session.isCurrent(generation) && _session.userId != null;
 
   Future<void> init() async {
     if (_initialized) return;
-    try {
-      final box = await Hive.openBox(_boxName);
-      _autoScrobble = (box.get(_autoScrobbleKey) as bool?) ?? true;
-      final cachedRaw = box.get(_cachedIntegrationsKey);
-      if (cachedRaw is String) {
-        try {
-          final data = jsonDecode(cachedRaw) as Map<String, dynamic>;
-          _applyIntegrationsData(data);
-        } catch (_) {}
-      }
-    } catch (_) {}
-
     _initialized = true;
-    fetchIntegrations();
+    final box = await Hive.openBox('tracking_integrations');
+    _autoScrobble = box.get('auto_scrobble', defaultValue: true) == true;
+    await box.delete('cached_integrations_v2');
+    _session.addListener(_sessionChanged);
+    _sessionChanged();
+  }
+
+  void _sessionChanged() {
+    _fetchRevision++;
+    _connections = [];
+    _entries = [];
+    _conflicts = [];
+    _writing.clear();
+    _isSyncing = false;
+    lastError = null;
+    notifyListeners();
+    if (_current(_session.generation)) unawaited(fetchIntegrations());
   }
 
   Future<void> setAutoScrobble(bool enabled) async {
     _autoScrobble = enabled;
-    try {
-      final box = await Hive.openBox(_boxName);
-      await box.put(_autoScrobbleKey, enabled);
-    } catch (_) {}
     notifyListeners();
+    final box = await Hive.openBox('tracking_integrations');
+    await box.put('auto_scrobble', enabled);
   }
 
-  Future<void> fetchIntegrations() async {
+  Future<bool> fetchIntegrations() async {
+    final generation = _session.generation;
+    if (!_current(generation)) return false;
+    final revision = ++_fetchRevision;
     try {
-      final dio = GetIt.I<DioClient>();
-      final response = await dio.get('${ApiConstants.caliumBackendUrl}/api/integrations');
-      if (response.data is Map<String, dynamic>) {
-        final data = response.data as Map<String, dynamic>;
-        _applyIntegrationsData(data);
-        try {
-          final box = await Hive.openBox(_boxName);
-          await box.put(_cachedIntegrationsKey, jsonEncode(data));
-        } catch (_) {}
+      final response = await GetIt.I<DioClient>().get('/api/integrations');
+      if (!_current(generation) || revision != _fetchRevision) return false;
+      final data = response.data;
+      if (data is! Map || data['success'] == false || data['entries'] is! List || data['connections'] is! List) throw StateError('Invalid integrations response');
+      _connections = (data['connections'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      _entries = (data['entries'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      _conflicts = (data['conflicts'] as List? ?? []).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      lastError = null;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      if (_current(generation) && revision == _fetchRevision) {
+        lastError = 'Takip bilgileri yenilenemedi.';
         notifyListeners();
       }
-    } catch (e) {
-      debugPrint('Error fetching integrations: $e');
+      return false;
     }
   }
 
-  void _applyIntegrationsData(Map<String, dynamic> data) {
-    final connections = (data['connections'] as List?)?.cast<dynamic>() ?? [];
-    for (final raw in connections) {
-      if (raw is! Map) continue;
-      final conn = Map<String, dynamic>.from(raw);
-      final provider = conn['provider'] as String?;
-      final connected = conn['connected'] == true;
-      final username = conn['username'] as String?;
-      final status = conn['status'] as String?;
-      final error = conn['error'] as String?;
-      DateTime? lastSynced;
-      if (conn['lastSyncedAt'] != null) {
-        try {
-          lastSynced = DateTime.parse(conn['lastSyncedAt'].toString());
-        } catch (_) {}
-      }
-
-      if (provider == 'anilist') {
-        _isAniListConnected = connected;
-        _aniListUsername = username;
-        _aniListStatus = status;
-        _aniListError = error;
-        _aniListLastSyncedAt = lastSynced;
-      } else if (provider == 'mal') {
-        _isMalConnected = connected;
-        _malUsername = username;
-        _malStatus = status;
-        _malError = error;
-        _malLastSyncedAt = lastSynced;
-      }
-    }
-
-    if (data['entries'] is List) {
-      _entries = (data['entries'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
-    }
-    if (data['conflicts'] is List) {
-      _conflicts = (data['conflicts'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
-    }
-  }
-
-  Future<bool> linkProvider({
-    required String provider,
-    required Future<void> Function(String url) onOpenUrl,
-  }) async {
+  Future<bool> linkProvider({required String provider, required Future<void> Function(String url) onOpenUrl}) async {
+    final generation = _session.generation;
+    if (!_current(generation)) return false;
     try {
-      final authDataSource = GetIt.I<AuthRemoteDataSource>();
-      final session = await authDataSource.startOAuth(
-        provider: provider,
-        intent: 'link',
-      );
+      final auth = GetIt.I<AuthRemoteDataSource>();
+      final session = await auth.startOAuth(provider: provider, intent: 'link');
+      if (!_current(generation)) return false;
       await onOpenUrl(session.authorizationUrl);
-      final success = await authDataSource.pollOAuthLink(
-        transactionId: session.transactionId,
-        verifier: session.verifier,
-      );
-      if (success) {
-        await triggerSync();
-        await fetchIntegrations();
-      }
-      return success;
-    } catch (e) {
-      debugPrint('Error linking provider $provider: $e');
+      if (!_current(generation)) return false;
+      final success = await auth.pollOAuthLink(transactionId: session.transactionId, verifier: session.verifier);
+      if (!_current(generation) || !success) return false;
+      await triggerSync();
+      return _current(generation);
+    } catch (_) {
       return false;
     }
   }
 
-  Future<bool> disconnectProvider({
-    required String provider,
-    String? password,
-  }) async {
+  Future<bool> disconnectProvider({required String provider, String? password}) async {
+    final generation = _session.generation;
+    if (!_current(generation)) return false;
     try {
-      final dio = GetIt.I<DioClient>();
-      await dio.delete(
-        '${ApiConstants.caliumBackendUrl}/api/integrations/$provider',
-        data: password != null && password.isNotEmpty ? {'password': password} : {},
-      );
-      await fetchIntegrations();
-      return true;
-    } catch (e) {
-      debugPrint('Error disconnecting provider $provider: $e');
+      await GetIt.I<DioClient>().delete('/api/integrations/$provider', data: password != null && password.isNotEmpty ? {'password': password} : {});
+      if (!_current(generation)) return false;
+      return await fetchIntegrations();
+    } catch (_) {
       return false;
     }
   }
-
   Future<bool> disconnectAniList() => disconnectProvider(provider: 'anilist');
   Future<bool> disconnectMal() => disconnectProvider(provider: 'mal');
 
   Future<void> triggerSync() async {
-    if (_isSyncing) return;
+    final generation = _session.generation;
+    if (!_current(generation) || _isSyncing) return;
     _isSyncing = true;
     notifyListeners();
     try {
-      final dio = GetIt.I<DioClient>();
-      await dio.post('${ApiConstants.caliumBackendUrl}/api/integrations/sync');
-      await Future.delayed(const Duration(seconds: 1));
-      await fetchIntegrations();
-    } catch (e) {
-      debugPrint('Error triggering sync: $e');
+      await GetIt.I<DioClient>().post('/api/integrations/sync');
+      if (_current(generation)) await fetchIntegrations();
+    } catch (_) {
+      if (_current(generation)) lastError = 'Eşitleme başlatılamadı.';
     } finally {
-      _isSyncing = false;
-      notifyListeners();
+      if (_current(generation)) {
+        _isSyncing = false;
+        notifyListeners();
+      }
     }
   }
 
-  Future<bool> resolveConflict({
-    required String entryId,
-    required String provider,
-    required int version,
-    required int entryVersion,
-    required String choice,
-    bool confirmDeletion = false,
-  }) async {
+  Future<bool> resolveConflict({required String entryId, required String provider, required int version, required int entryVersion, required String choice, bool confirmDeletion = false}) async {
+    final generation = _session.generation;
+    if (!_current(generation)) return false;
     try {
-      final dio = GetIt.I<DioClient>();
-      await dio.post(
-        '${ApiConstants.caliumBackendUrl}/api/tracking/conflicts/resolve',
-        data: {
-          'entryId': entryId,
-          'provider': provider,
-          'version': version,
-          'entryVersion': entryVersion,
-          'choice': choice,
-          if (confirmDeletion) 'confirmDeletion': true,
-        },
-      );
-      _conflicts.removeWhere((c) => c['entryId'] == entryId && c['provider'] == provider);
-      notifyListeners();
-      await fetchIntegrations();
-      return true;
-    } catch (e) {
-      debugPrint('Error resolving conflict: $e');
+      await GetIt.I<DioClient>().post('/api/tracking/conflicts/resolve', data: {
+        'entryId': entryId, 'provider': provider, 'version': version,
+        'entryVersion': entryVersion, 'choice': choice,
+        if (confirmDeletion) 'confirmDeletion': true,
+      });
+      if (!_current(generation)) return false;
+      return await fetchIntegrations();
+    } catch (_) {
+      if (_current(generation)) await fetchIntegrations();
       return false;
     }
   }
 
-  Future<void> scrobbleEpisode({
-    required String animeTitle,
-    String? animeId,
-    required int episode,
-    bool isCompleted = false,
-    int? totalEpisodes,
-  }) async {
-    if (!_autoScrobble) return;
-    if (!_isAniListConnected && !_isMalConnected) return;
+  Future<bool> scrobbleEpisode({required String animeTitle, String? animeId, required int episode, bool isCompleted = false, int? totalEpisodes}) async {
+    if (!_autoScrobble || (!isAniListConnected && !isMalConnected) || animeId == null || animeId.isEmpty || episode < 1) return false;
+    return _writeProgress(sourceId: animeId, title: animeTitle, episode: episode, totalEpisodes: totalEpisodes);
+  }
 
+  Future<bool> updateProgress({required String sourceId, required String title, required int completedEpisodes, int? totalEpisodes}) => _writeProgress(sourceId: sourceId, title: title, episode: completedEpisodes, totalEpisodes: totalEpisodes);
+
+  Future<bool> _writeProgress({required String sourceId, required String title, required int episode, int? totalEpisodes}) async {
+    final generation = _session.generation;
+    if (!_current(generation) || sourceId.isEmpty || episode < 0 || !_writing.add(sourceId)) return false;
     try {
+      if (!await fetchIntegrations() || !_current(generation)) return false;
+      final matches = _entries.where((entry) => entry['sourceId'] == sourceId).toList();
+      if (matches.length > 1) throw StateError('Ambiguous source mapping');
+      final match = matches.isEmpty ? null : matches.single;
       final dio = GetIt.I<DioClient>();
-      Map<String, dynamic>? match;
-      for (final entry in _entries) {
-        if (animeId != null && animeId.isNotEmpty && entry['sourceId'] == animeId) {
-          match = entry;
-          break;
-        }
-        if (entry['title'] != null && entry['title'].toString().toLowerCase() == animeTitle.toLowerCase()) {
-          match = entry;
-          break;
-        }
-      }
-
+      final Response response;
       if (match != null) {
-        await dio.post(
-          '${ApiConstants.caliumBackendUrl}/api/tracking/progress',
-          data: {
-            'entryId': match['id'],
-            'version': match['version'],
-            'completedEpisodes': episode,
-          },
-        );
+        if (match['id'] is! String || match['version'] is! int) throw StateError('Missing entry version');
+        response = await dio.post('/api/tracking/progress', data: {'entryId': match['id'], 'version': match['version'], 'completedEpisodes': episode});
       } else {
-        await dio.patch(
-          '${ApiConstants.caliumBackendUrl}/api/tracking/entries',
-          data: {
-            if (animeId != null && animeId.isNotEmpty) 'sourceId': animeId,
-            'title': animeTitle,
-            ...?((totalEpisodes != null) ? {'totalEpisodes': totalEpisodes} : null),
-            'confirmMapping': true,
-            'value': {
-              'progress': episode,
-              'status': isCompleted ? 'completed' : 'watching',
-            },
-          },
-        );
+        response = await dio.patch('/api/tracking/entries', data: {
+          'sourceId': sourceId, 'title': title,
+          ...?((totalEpisodes != null) ? {'totalEpisodes': totalEpisodes} : null),
+          'confirmMapping': true,
+          'value': {'progress': episode, 'status': totalEpisodes != null && episode >= totalEpisodes ? 'completed' : 'watching'},
+        });
       }
-    } catch (e) {
-      debugPrint('Scrobble error: $e');
+      if (!_current(generation)) return false;
+      final data = response.data;
+      if (data is! Map || data['success'] == false) throw StateError('Invalid tracking response');
+      final raw = data['entry'];
+      if (raw is! Map || raw['id'] is! String || raw['version'] is! int || raw['sourceId'] != sourceId) throw StateError('Missing canonical entry');
+      _fetchRevision++;
+      _entries.removeWhere((entry) => entry['id'] == raw['id'] || entry['sourceId'] == sourceId);
+      _entries.add(Map<String, dynamic>.from(raw));
+      lastError = null;
+      notifyListeners();
+      return true;
+    } on DioException catch (e) {
+      if (_current(generation)) {
+        if (e.response?.statusCode == 409) await fetchIntegrations();
+        if (_current(generation)) {
+          lastError = e.response?.statusCode == 409 ? 'İlerleme başka bir cihazda değişti. Yeniden deneyin.' : 'İlerleme kaydedilemedi.';
+          notifyListeners();
+        }
+      }
+      return false;
+    } catch (_) {
+      if (_current(generation)) {
+        lastError = 'İlerleme kaydedilemedi.';
+        notifyListeners();
+      }
+      return false;
+    } finally {
+      if (_current(generation)) _writing.remove(sourceId);
     }
   }
 }

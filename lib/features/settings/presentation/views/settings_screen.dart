@@ -9,8 +9,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
+import 'package:calium_stream/core/utils/navigation_utils.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/core/widgets/app_content_frame.dart';
+import 'package:calium_stream/core/services/app_preferences.dart';
 import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:calium_stream/features/settings/presentation/bloc/settings_bloc.dart';
@@ -32,14 +34,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _isPrivate = false;
 
-  String _defaultQuality = '1080p';
-  String _defaultAudio = 'Orijinal (Japonca)';
-  double _subtitleSize = 18.0;
-  bool _gestureBrightness = true;
-  bool _gestureVolume = true;
-  bool _autoNext = true;
-  bool _autoSkipIntro = false;
+  String _defaultQuality = AppPreferences.instance.defaultQuality;
+  String _defaultAudio = AppPreferences.instance.defaultAudio;
+  double _subtitleSize = AppPreferences.instance.subtitleSize.toDouble();
+  bool _gestureBrightness = AppPreferences.instance.gestureBrightness;
+  bool _gestureVolume = AppPreferences.instance.gestureVolume;
+  bool _autoNext = AppPreferences.instance.autoNext;
+  bool _autoSkipIntro = AppPreferences.instance.autoSkipIntro;
   bool _isConnectingIntegration = false;
+
+  static const _qualityLabels = {
+    '2160p': '2160p (4K)',
+    '1440p': '1440p (2K)',
+    '1080p': '1080p',
+    '720p': '720p',
+    '480p': '480p',
+    '360p': '360p',
+  };
+
+  static const _audioLabels = {
+    'original': 'Orijinal (Japonca)',
+    'tr': 'Türkçe Dublaj',
+    'en': 'İngilizce Dublaj',
+  };
 
   bool _initialized = false;
 
@@ -136,13 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: Colors.white,
                   size: 20,
                 ),
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/');
-                  }
-                },
+                onPressed: () => goBackOrHome(context),
               ),
               title: Text(
                 'Ayarlar & Profil',
@@ -390,28 +401,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children:
-                [
-                  '2160p (4K)',
-                  '1440p (2K)',
-                  '1080p',
-                  '720p',
-                  '480p',
-                  '360p',
-                ].map((q) {
-                  final isSel = _defaultQuality == q;
-                  return ChoiceChip(
-                    label: Text(q),
-                    selected: isSel,
-                    selectedColor: AppColors.primary,
-                    backgroundColor: AppColors.surfaceElevated,
-                    labelStyle: TextStyle(
-                      color: isSel ? Colors.black : AppColors.textSecondary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    onSelected: (_) => setState(() => _defaultQuality = q),
-                  );
-                }).toList(),
+            children: _qualityLabels.entries.map((entry) {
+              final isSel = _defaultQuality == entry.key;
+              return ChoiceChip(
+                label: Text(entry.value),
+                selected: isSel,
+                selectedColor: AppColors.primary,
+                backgroundColor: AppColors.surfaceElevated,
+                labelStyle: TextStyle(
+                  color: isSel ? Colors.black : AppColors.textSecondary,
+                  fontWeight: FontWeight.bold,
+                ),
+                onSelected: (_) {
+                  setState(() => _defaultQuality = entry.key);
+                  AppPreferences.instance.setDefaultQuality(entry.key);
+                },
+              );
+            }).toList(),
           ),
           const Divider(color: AppColors.border, height: 32),
 
@@ -420,23 +426,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children:
-                ['Orijinal (Japonca)', 'Türkçe Dublaj', 'İngilizce Dublaj'].map(
-                  (a) {
-                    final isSel = _defaultAudio == a;
-                    return ChoiceChip(
-                      label: Text(a),
-                      selected: isSel,
-                      selectedColor: AppColors.primary,
-                      backgroundColor: AppColors.surfaceElevated,
-                      labelStyle: TextStyle(
-                        color: isSel ? Colors.black : AppColors.textSecondary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      onSelected: (_) => setState(() => _defaultAudio = a),
-                    );
-                  },
-                ).toList(),
+            children: _audioLabels.entries.map((entry) {
+              final isSel = _defaultAudio == entry.key;
+              return ChoiceChip(
+                label: Text(entry.value),
+                selected: isSel,
+                selectedColor: AppColors.primary,
+                backgroundColor: AppColors.surfaceElevated,
+                labelStyle: TextStyle(
+                  color: isSel ? Colors.black : AppColors.textSecondary,
+                  fontWeight: FontWeight.bold,
+                ),
+                onSelected: (_) {
+                  setState(() => _defaultAudio = entry.key);
+                  AppPreferences.instance.setDefaultAudio(entry.key);
+                },
+              );
+            }).toList(),
           ),
           const Divider(color: AppColors.border, height: 32),
 
@@ -456,13 +462,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           Slider(
             value: _subtitleSize,
-            min: 12.0,
-            max: 32.0,
-            divisions: 10,
+            min: 30.0,
+            max: 64.0,
+            divisions: 34,
             activeColor: AppColors.primary,
             inactiveColor: AppColors.surfaceElevated,
             label: '${_subtitleSize.toInt()} pt',
             onChanged: (val) => setState(() => _subtitleSize = val),
+            onChangeEnd: (val) =>
+                AppPreferences.instance.setSubtitleSize(val.round()),
           ),
           const Divider(color: AppColors.border, height: 32),
 
@@ -481,7 +489,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             value: _gestureBrightness,
             activeThumbColor: AppColors.primary,
-            onChanged: (val) => setState(() => _gestureBrightness = val),
+            onChanged: (val) {
+              setState(() => _gestureBrightness = val);
+              AppPreferences.instance.setGestureBrightness(val);
+            },
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
@@ -495,7 +506,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             value: _gestureVolume,
             activeThumbColor: AppColors.primary,
-            onChanged: (val) => setState(() => _gestureVolume = val),
+            onChanged: (val) {
+              setState(() => _gestureVolume = val);
+              AppPreferences.instance.setGestureVolume(val);
+            },
           ),
           const Divider(color: AppColors.border, height: 32),
 
@@ -511,7 +525,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             value: _autoNext,
             activeThumbColor: AppColors.primary,
-            onChanged: (val) => setState(() => _autoNext = val),
+            onChanged: (val) {
+              setState(() => _autoNext = val);
+              AppPreferences.instance.setAutoNext(val);
+            },
           ),
           const SizedBox(height: 8),
 
@@ -527,7 +544,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             value: _autoSkipIntro,
             activeThumbColor: AppColors.primary,
-            onChanged: (val) => setState(() => _autoSkipIntro = val),
+            onChanged: (val) {
+              setState(() => _autoSkipIntro = val);
+              AppPreferences.instance.setAutoSkipIntro(val);
+            },
           ),
         ],
       ),

@@ -6,16 +6,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 import 'package:media_kit/media_kit.dart' hide PlayerState;
 import 'package:media_kit_video/media_kit_video.dart';
 
 import 'package:calium_stream/core/constants/api_constants.dart';
+import 'package:calium_stream/core/services/app_preferences.dart';
 import 'package:calium_stream/core/services/sync_service.dart';
 import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
+import 'package:calium_stream/core/utils/navigation_utils.dart';
 import 'package:calium_stream/core/widgets/app_status_view.dart';
 import 'package:calium_stream/features/anime_details/domain/entities/episode_entity.dart';
 import 'package:calium_stream/features/anime_details/domain/repositories/anime_detail_repository.dart';
@@ -29,6 +31,8 @@ import 'package:calium_stream/features/player/presentation/playback_recovery.dar
 import 'package:calium_stream/features/player/presentation/widgets/in_player_episodes_sheet.dart';
 import 'package:calium_stream/features/player/presentation/widgets/intro_song_badge.dart';
 import 'package:calium_stream/features/player/presentation/widgets/player_controls_hud.dart';
+import 'package:calium_stream/features/player/presentation/widgets/player_episode_swipe_handle.dart';
+import 'package:calium_stream/features/player/presentation/widgets/precision_seek_bar.dart';
 import 'package:calium_stream/features/player/presentation/widgets/player_gesture_detector.dart';
 import 'package:calium_stream/features/player/presentation/widgets/player_settings_sheet.dart';
 import 'package:calium_stream/features/player/presentation/widgets/skip_intro_button.dart';
@@ -107,7 +111,8 @@ class _AnimePlayerContent extends StatefulWidget {
   State<_AnimePlayerContent> createState() => _AnimePlayerContentState();
 }
 
-class _AnimePlayerContentState extends State<_AnimePlayerContent> {
+class _AnimePlayerContentState extends State<_AnimePlayerContent>
+    with WidgetsBindingObserver {
   late final Player _player;
   late final VideoController _videoController;
 
@@ -117,13 +122,19 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   late String _currentEpisodeId;
 
   bool _showControls = true;
+  bool _isSeeking = false;
+  bool _episodesSheetOpen = false;
   bool _isLocked = false;
   double _brightness = 1.0;
   double _volume = 100.0;
   double _currentPlaybackSpeed = 1.0;
-  int _subtitleSize = 40;
-  bool _autoSkipIntro = true;
-  bool _autoNextEpisode = true;
+  int _subtitleSize = AppPreferences.instance.subtitleSize;
+  bool _autoSkipIntro = AppPreferences.instance.autoSkipIntro;
+  bool _autoNextEpisode = AppPreferences.instance.autoNext;
+  final bool _gestureBrightness = AppPreferences.instance.gestureBrightness;
+  final bool _gestureVolume = AppPreferences.instance.gestureVolume;
+  bool _isAppForeground = true;
+  bool _resumeAfterBackground = false;
   int _autoNextCountdown = 5;
   Timer? _autoNextTimer;
   Timer? _controlsTimer;
@@ -168,6 +179,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _currentSeasonNumber = widget.seasonNumber;
     _currentEpisodeNumber = widget.episodeNumber;
     _currentEpisodeTitle = widget.episodeTitle;
@@ -178,7 +190,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
 
     // Read saved progress from Hive
     try {
-      final box = Hive.box('history');
+      final box = AccountSession.instance.box('history');
       final saved = box.get(widget.animeId);
       if (saved is Map) {
         final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
@@ -301,6 +313,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           if (target.inSeconds > 3) {
             _initialResumeTarget = target;
             _player.seek(target);
+            _savedProgressRatio = 0.0;
             _resumeSafetyTimer = Timer(const Duration(seconds: 10), () {
               _initialResumeTarget = null;
             });
@@ -313,6 +326,9 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _player.stream.playing.listen((playing) {
         if (mounted) {
           setState(() => _isPlaying = playing);
+          if (!playing) {
+            _stopAutoNextCountdown();
+          }
           if (!playing &&
               !_isReconnecting &&
               _currentStreamUrl.isNotEmpty &&
@@ -363,7 +379,10 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       _player.stream.completed.listen((completed) {
         if (completed &&
             mounted &&
+            _isAppForeground &&
             !_isReconnecting &&
+            _duration > Duration.zero &&
+            _position >= _duration - const Duration(seconds: 3) &&
             _currentStreamUrl.isNotEmpty &&
             _autoNextEpisode) {
           final cubitState = context.read<PlayerCubit>().state;
@@ -391,6 +410,32 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         _fetchIntroSongIfNeeded(context, cubitState);
       }
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _isAppForeground = state == AppLifecycleState.resumed;
+
+    if (!_isAppForeground) {
+      // Never advance episodes while the app is in the background.
+      _autoNextTimer?.cancel();
+      _autoNextTimer = null;
+    }
+
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      if (_isPlaying) {
+        _resumeAfterBackground = true;
+        _player.pause();
+      }
+      return;
+    }
+
+    if (state == AppLifecycleState.resumed && _resumeAfterBackground) {
+      _resumeAfterBackground = false;
+      _player.play();
+    }
   }
 
   Future<void> _triggerAutoReconnect() async {
@@ -486,7 +531,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
 
     if (resolvedEpId.isEmpty || resolvedEpId.contains('_')) {
       try {
-        final box = Hive.box('history');
+        final box = AccountSession.instance.box('history');
         final saved = box.get(widget.animeId);
         if (saved is Map) {
           final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
@@ -687,6 +732,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       // Explicit seek after subtitle setup & media open
       if (seekTarget != null && seekTarget.inMilliseconds > 3000) {
         await _player.seek(seekTarget);
+        _savedProgressRatio = 0.0;
       }
     } catch (_) {
       if (!mounted || generation != _playbackGeneration) return;
@@ -702,12 +748,36 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     }
   }
 
-  void _startAutoNextCountdown(int nextSeason, int nextEp) {
-    if (_autoNextTimer != null) return;
+  bool _isNearEnd(int currentSec, int? nextEpTime) {
+    final totalSec = _duration.inSeconds;
+    if (totalSec <= 0) return false;
+    // Ignore implausible timestamps (e.g. an episode number parsed as
+    // seconds) so they cannot trigger an early switch.
+    final hasNextEpTime =
+        nextEpTime != null &&
+        nextEpTime > totalSec * 0.5 &&
+        nextEpTime < totalSec;
+    return hasNextEpTime
+        ? currentSec >= nextEpTime
+        : (totalSec > 15 && currentSec >= totalSec - 8);
+  }
+
+  void _startAutoNextCountdown(int nextSeason, int nextEp, int? nextEpTime) {
+    if (!_isAppForeground || !_isPlaying || _autoNextTimer != null) return;
     setState(() => _autoNextCountdown = 5);
     _autoNextTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
+        return;
+      }
+      if (!_isAppForeground ||
+          !_isPlaying ||
+          !_isNearEnd(_position.inSeconds, nextEpTime)) {
+        timer.cancel();
+        _autoNextTimer = null;
+        if (_autoNextCountdown != 0) {
+          setState(() => _autoNextCountdown = 0);
+        }
         return;
       }
       if (_autoNextCountdown <= 1) {
@@ -724,6 +794,14 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     _autoNextTimer?.cancel();
     _autoNextTimer = null;
     setState(() => _isDismissedNextEpPrompt = true);
+  }
+
+  void _stopAutoNextCountdown() {
+    _autoNextTimer?.cancel();
+    _autoNextTimer = null;
+    if (_autoNextCountdown != 0) {
+      setState(() => _autoNextCountdown = 0);
+    }
   }
 
   Future<void> _switchEpisode(
@@ -747,7 +825,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         : '';
 
     try {
-      final box = Hive.box('history');
+      final box = AccountSession.instance.box('history');
       final saved = box.get(widget.animeId);
       if (saved is Map) {
         final sNum = int.tryParse(saved['seasonNumber']?.toString() ?? '');
@@ -812,6 +890,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       if (_currentSeasonNumber != season) _seasonEpisodes = [];
       _currentSeasonNumber = season;
       _currentEpisodeNumber = episode;
+      _isSeeking = false;
       _currentEpisodeTitle = title ?? 'Bölüm $episode';
       _currentEpisodeId = targetEpId;
       _position = Duration.zero;
@@ -890,8 +969,16 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     _resetControlsTimer();
   }
 
+  void _seek(Duration target) {
+    if (_isLocked || _duration <= Duration.zero) return;
+    _stopAutoNextCountdown();
+    _cancelInitialResume();
+    _player.seek(clampPlayerSeek(target, _duration));
+  }
+
   void _resetControlsTimer() {
     _controlsTimer?.cancel();
+    if (_isSeeking || _episodesSheetOpen) return;
     _controlsTimer = Timer(const Duration(milliseconds: 4000), () {
       if (mounted && _isPlaying && !_isLocked) {
         setState(() => _showControls = false);
@@ -943,28 +1030,39 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           },
           onSubtitleSizeChanged: (size) {
             setState(() => _subtitleSize = size);
+            AppPreferences.instance.setSubtitleSize(size);
           },
           onFitCoverToggled: () {
             context.read<PlayerCubit>().toggleFitCover();
           },
-          onAutoSkipIntroToggled: () {
-            setState(() => _autoSkipIntro = !_autoSkipIntro);
+          onAutoSkipIntroToggled: (val) {
+            setState(() => _autoSkipIntro = val);
+            AppPreferences.instance.setAutoSkipIntro(val);
           },
-          onAutoNextEpisodeToggled: () {
-            setState(() => _autoNextEpisode = !_autoNextEpisode);
+          onAutoNextEpisodeToggled: (val) {
+            setState(() => _autoNextEpisode = val);
+            AppPreferences.instance.setAutoNext(val);
+            if (!val) {
+              _stopAutoNextCountdown();
+            }
           },
         );
       },
     );
   }
 
-  void _openEpisodesSheet() {
-    showModalBottomSheet(
+  Future<void> _openEpisodesSheet({bool horizontal = false}) async {
+    if (_isLocked || _isSeeking || _episodesSheetOpen) return;
+    _episodesSheetOpen = true;
+    _controlsTimer?.cancel();
+    await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) {
         return InPlayerEpisodesSheet(
+          horizontal: horizontal,
+          posterUrl: widget.posterUrl,
           episodes: _seasonEpisodes,
           currentEpisodeNumber: _currentEpisodeNumber,
           currentSeasonNumber: _currentSeasonNumber,
@@ -979,10 +1077,13 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
         );
       },
     );
+    _episodesSheetOpen = false;
+    if (mounted) _resetControlsTimer();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _recovery.cancel();
     _playbackGeneration++;
     _resumeSafetyTimer?.cancel();
@@ -999,12 +1100,14 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
     }
     _positionNotifier.dispose();
     _player.dispose();
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _restoreSystemUi();
     super.dispose();
+  }
+
+  void _restoreSystemUi() {
+    // Empty list releases the landscape lock without forcing tablets to portrait.
+    SystemChrome.setPreferredOrientations(const []);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
   @override
@@ -1014,6 +1117,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
       body: Focus(
         autofocus: true,
         onKeyEvent: (node, event) {
+          if (_isLocked) return KeyEventResult.ignored;
           if (event is KeyDownEvent) {
             final key = event.logicalKey;
             if (key == LogicalKeyboardKey.select ||
@@ -1030,13 +1134,13 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                 key == LogicalKeyboardKey.mediaRewind ||
                 key == LogicalKeyboardKey.mediaTrackPrevious) {
               final target = _position - const Duration(seconds: 10);
-              _player.seek(target < Duration.zero ? Duration.zero : target);
+              _seek(target);
               return KeyEventResult.handled;
             } else if (key == LogicalKeyboardKey.arrowRight ||
                 key == LogicalKeyboardKey.mediaFastForward ||
                 key == LogicalKeyboardKey.mediaTrackNext) {
               final target = _position + const Duration(seconds: 10);
-              _player.seek(target > _duration ? _duration : target);
+              _seek(target);
               return KeyEventResult.handled;
             } else if (key == LogicalKeyboardKey.arrowUp) {
               final newVol = (_volume + 5.0).clamp(0.0, 100.0);
@@ -1053,18 +1157,15 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
           return KeyEventResult.ignored;
         },
         child: PopScope(
-          canPop: true,
+          canPop: canGoBack(context),
           onPopInvokedWithResult: (didPop, result) async {
             await _player.stop();
             _saveCurrentProgress(_position);
             try {
               GetIt.I<SyncService>().syncNow();
             } catch (_) {}
-            await SystemChrome.setPreferredOrientations([
-              DeviceOrientation.portraitUp,
-              DeviceOrientation.portraitDown,
-            ]);
-            await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+            _restoreSystemUi();
+            if (!didPop && context.mounted) context.go('/');
           },
           child: BlocConsumer<PlayerCubit, PlayerState>(
             listener: (context, state) {
@@ -1164,13 +1265,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                                     color: AppColors.border,
                                   ),
                                 ),
-                                onPressed: () {
-                                  if (context.canPop()) {
-                                    context.pop();
-                                  } else {
-                                    context.go('/');
-                                  }
-                                },
+                                onPressed: () => goBackOrHome(context),
                                 child: const Text('Geri Dön'),
                               ),
                               if (hasCompletedDownloads)
@@ -1229,15 +1324,17 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                         isLocked: _isLocked,
                         initialBrightness: _brightness,
                         initialVolume: _volume,
+                        enableBrightness: _gestureBrightness,
+                        enableVolume: _gestureVolume,
                         onTap: _toggleControls,
                         onDoubleTapLeft: (seconds) {
                           _cancelInitialResume();
-                          _player.seek(_position - Duration(seconds: seconds));
+                          _seek(_position - Duration(seconds: seconds));
                           _resetControlsTimer();
                         },
                         onDoubleTapRight: (seconds) {
                           _cancelInitialResume();
-                          _player.seek(_position + Duration(seconds: seconds));
+                          _seek(_position + Duration(seconds: seconds));
                           _resetControlsTimer();
                         },
                         onDoubleTapCenter: () {
@@ -1434,7 +1531,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                             _introSkipped = true;
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               if (mounted) {
-                                _player.seek(Duration(seconds: introEnd));
+                                _player.seek(clampPlayerSeek(Duration(seconds: introEnd), _duration));
                               }
                             });
                           }
@@ -1451,7 +1548,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                             child: SkipIntroButton(
                               isVisible: true,
                               onPressed: () {
-                                _player.seek(Duration(seconds: introEnd));
+                                _player.seek(clampPlayerSeek(Duration(seconds: introEnd), _duration));
                               },
                             ),
                           );
@@ -1463,22 +1560,26 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                       ValueListenableBuilder<Duration>(
                         valueListenable: _positionNotifier,
                         builder: (context, pos, _) {
-                          final totalSec = _duration.inSeconds;
-                          final currentSec = pos.inSeconds;
-                          final nextEpTime = state.sourceData.nextEpisodeTime;
-                          final isNearEnd = nextEpTime != null && nextEpTime > 0 && nextEpTime < totalSec
-                              ? (currentSec >= nextEpTime)
-                              : (totalSec > 15 && currentSec >= (totalSec - 8));
-
-                          if (!isNearEnd) return const SizedBox.shrink();
+                          if (!_isNearEnd(
+                            pos.inSeconds,
+                            state.sourceData.nextEpisodeTime,
+                          )) {
+                            return const SizedBox.shrink();
+                          }
 
                           // Trigger Auto Next Countdown if enabled
                           if (_autoNextEpisode &&
+                              _isAppForeground &&
+                              _isPlaying &&
                               !_isReconnecting &&
                               _playbackError == null &&
                               _autoNextTimer == null) {
                             WidgetsBinding.instance.addPostFrameCallback((_) {
-                              _startAutoNextCountdown(nextSeason, nextEp);
+                              _startAutoNextCountdown(
+                                nextSeason,
+                                nextEp,
+                                state.sourceData.nextEpisodeTime,
+                              );
                             });
                           }
 
@@ -1642,37 +1743,38 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                           },
                           onSeekForward: () {
                             _cancelInitialResume();
-                            _player.seek(
+                            _seek(
                               _position + const Duration(seconds: 10),
                             );
                             _resetControlsTimer();
                           },
                           onSeekBackward: () {
                             _cancelInitialResume();
-                            _player.seek(
+                            _seek(
                               _position - const Duration(seconds: 10),
                             );
                             _resetControlsTimer();
                           },
                           onSeek: (val) {
                             _cancelInitialResume();
-                            _player.seek(val);
+                            _seek(val);
                             _resetControlsTimer();
                           },
+                          onPreviewSeek: (val) {
+                            _stopAutoNextCountdown();
+                            _cancelInitialResume();
+                            _player.seek(clampPlayerSeek(val, _duration));
+                          },
                           onSeekStart: () {
+                            _isSeeking = true;
                             _cancelInitialResume();
                             _controlsTimer?.cancel();
                           },
                           onSeekEnd: () {
+                            _isSeeking = false;
                             _resetControlsTimer();
                           },
-                          onBack: () {
-                            if (context.canPop()) {
-                              context.pop();
-                            } else {
-                              context.go('/');
-                            }
-                          },
+                          onBack: () => goBackOrHome(context),
                           onOpenAudioModal: () => _openSettingsSheet(state),
                           onOpenQualityModal: () => _openSettingsSheet(state),
                           onOpenSubtitleModal: () => _openSettingsSheet(state),
@@ -1698,6 +1800,18 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                         ),
                       ),
                     ),
+                    if (!_isLocked && _showControls)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: SafeArea(
+                          top: false,
+                          child: PlayerEpisodeSwipeHandle(
+                            onOpen: () => _openEpisodesSheet(horizontal: true),
+                          ),
+                        ),
+                      ),
                     if (_playbackError != null)
                       Positioned.fill(
                         child: ColoredBox(
@@ -1708,13 +1822,7 @@ class _AnimePlayerContentState extends State<_AnimePlayerContent> {
                             icon: Icons.error_outline_rounded,
                             actions: [
                               OutlinedButton(
-                                onPressed: () {
-                                  if (context.canPop()) {
-                                    context.pop();
-                                  } else {
-                                    context.go('/');
-                                  }
-                                },
+                                onPressed: () => goBackOrHome(context),
                                 child: const Text('Geri dön'),
                               ),
                               OutlinedButton(

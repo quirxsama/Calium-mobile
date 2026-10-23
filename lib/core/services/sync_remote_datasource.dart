@@ -10,6 +10,14 @@ abstract class SyncRemoteDataSource {
   Future<void> uploadFavorites(List<Map<String, dynamic>> favoriteItems);
   Future<List<Map<String, dynamic>>> getLatestEpisodes();
   Future<List<Map<String, dynamic>>> getNotifications();
+  Future<void> registerDeviceToken({
+    required String token,
+    required String installationId,
+    String platform = 'android',
+  });
+  Future<void> unregisterDeviceToken({
+    required String installationId,
+  });
 }
 
 class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
@@ -55,7 +63,7 @@ class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
         data: {'history': historyItems},
       );
     } catch (_) {
-      // Best effort background sync
+      rethrow;
     }
   }
 
@@ -82,7 +90,7 @@ class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
         data: {'favorites': favoriteItems},
       );
     } catch (_) {
-      // Best effort
+      rethrow;
     }
   }
 
@@ -112,5 +120,37 @@ class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
     } catch (_) {
       return [];
     }
+  }
+
+  @override
+  Future<void> registerDeviceToken({
+    required String token,
+    required String installationId,
+    String platform = 'android',
+  }) async {
+    try {
+      await _dioClient.post(
+        '/api/notifications/devices',
+        data: {
+          'token': token,
+          'installationId': installationId,
+          'platform': platform,
+        },
+      );
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> unregisterDeviceToken({
+    required String installationId,
+  }) async {
+    try {
+      await _dioClient.delete(
+        '/api/notifications/devices',
+        data: {
+          'installationId': installationId,
+        },
+      );
+    } catch (_) {}
   }
 }

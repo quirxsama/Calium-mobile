@@ -17,6 +17,7 @@ class DownloadOptionsSheet extends StatefulWidget {
     required this.seasonNumber,
     required this.posterUrl,
     this.allSeasonEpisodes,
+    this.selectionMode = false,
     super.key,
   });
 
@@ -27,6 +28,7 @@ class DownloadOptionsSheet extends StatefulWidget {
   final int seasonNumber;
   final String posterUrl;
   final List<EpisodeEntity>? allSeasonEpisodes;
+  final bool selectionMode;
 
   @override
   State<DownloadOptionsSheet> createState() => _DownloadOptionsSheetState();
@@ -120,7 +122,7 @@ class _DownloadOptionsSheetState extends State<DownloadOptionsSheet> {
     );
 
     final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop();
+    Navigator.of(context).pop(true);
 
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
@@ -192,6 +194,10 @@ class _DownloadOptionsSheetState extends State<DownloadOptionsSheet> {
       return;
     }
 
+    final batchDescription = widget.selectionMode
+        ? '${widget.allSeasonEpisodes!.length} seçili bölüm'
+        : '${widget.seasonNumber}. Sezon (${widget.allSeasonEpisodes!.length} Bölüm)';
+
     final addedCount = DownloadService.instance.addSeasonTasks(
       animeId: widget.animeId,
       animeTitle: widget.animeTitle,
@@ -203,7 +209,7 @@ class _DownloadOptionsSheetState extends State<DownloadOptionsSheet> {
     );
 
     final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop();
+    Navigator.of(context).pop(true);
 
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
@@ -237,6 +243,8 @@ class _DownloadOptionsSheetState extends State<DownloadOptionsSheet> {
                   Text(
                     addedCount > 0
                         ? '$addedCount bölüm sıraya eklendi'
+                        : widget.selectionMode
+                        ? 'Seçilen bölümler zaten indirmelerde'
                         : 'Bu sezon zaten indirmelerde',
                     style: const TextStyle(
                       color: Colors.white,
@@ -245,7 +253,7 @@ class _DownloadOptionsSheetState extends State<DownloadOptionsSheet> {
                     ),
                   ),
                   Text(
-                    '${widget.animeTitle} • ${widget.seasonNumber}. Sezon (${widget.allSeasonEpisodes!.length} Bölüm)',
+                    '${widget.animeTitle} • $batchDescription',
                     style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 11,
@@ -513,34 +521,36 @@ class _DownloadOptionsSheetState extends State<DownloadOptionsSheet> {
                 ],
 
                 // 3. Start Download Button (Single Episode)
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                if (!widget.selectionMode)
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: _selectedStream != null
+                        ? _handleStartDownload
+                        : null,
+                    icon: const Icon(Icons.download_rounded, size: 22),
+                    label: Text(
+                      _selectedStream != null
+                          ? 'Bölümü indir • ${_selectedStream!.quality}'
+                          : 'İndir',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                   ),
-                  onPressed: _selectedStream != null
-                      ? _handleStartDownload
-                      : null,
-                  icon: const Icon(Icons.download_rounded, size: 22),
-                  label: Text(
-                    _selectedStream != null
-                        ? 'Bölümü indir • ${_selectedStream!.quality}'
-                        : 'İndir',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
 
-                // 4. Batch Season Download Button (if season episodes available)
+                // 4. Batch download (whole season or selected episodes)
                 if (hasSeasonEpisodes &&
-                    widget.allSeasonEpisodes!.length > 1) ...[
-                  const SizedBox(height: 10),
+                    (widget.selectionMode ||
+                        widget.allSeasonEpisodes!.length > 1)) ...[
+                  if (!widget.selectionMode) const SizedBox(height: 10),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.primary,
@@ -558,7 +568,9 @@ class _DownloadOptionsSheetState extends State<DownloadOptionsSheet> {
                         : null,
                     icon: const Icon(Icons.video_library_rounded, size: 20),
                     label: Text(
-                      'Sezonu indir (${widget.allSeasonEpisodes!.length} bölüm)',
+                      widget.selectionMode
+                          ? 'Seçilenleri indir (${widget.allSeasonEpisodes!.length} bölüm)'
+                          : 'Sezonu indir (${widget.allSeasonEpisodes!.length} bölüm)',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,

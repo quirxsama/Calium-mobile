@@ -8,7 +8,7 @@ abstract final class StorageKeys {
   static const String userDataBox = 'user_data_box';
   static const String watchHistoryBox = 'watch_history_box';
   static const String favoritesBox = 'favorites_box';
-  static const String preferencesBox = 'preferences_box';
+  static const String preferencesBox = 'preferences';
   static const String downloadTasksBox = 'download_tasks_box';
 
   // ─── Secure Storage Keys ─────────────────────────────────────
@@ -22,8 +22,13 @@ abstract final class StorageKeys {
   // ─── Preferences Keys ────────────────────────────────────────
   static const String themeMode = 'theme_mode';
   static const String preferredQuality = 'preferred_quality';
+  static const String preferredAudioLanguage = 'preferred_audio_language';
   static const String preferredSubtitleLanguage = 'preferred_subtitle_language';
+  static const String subtitleSize = 'subtitle_size';
+  static const String gestureBrightness = 'gesture_brightness';
+  static const String gestureVolume = 'gesture_volume';
   static const String autoPlayNext = 'auto_play_next';
+  static const String autoSkipIntro = 'auto_skip_intro';
   static const String downloadQuality = 'download_quality';
   static const String downloadWifiOnly = 'download_wifi_only';
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -6,6 +7,7 @@ import 'package:media_kit/media_kit.dart';
 
 import 'package:calium_stream/app/app.dart';
 import 'package:calium_stream/app/observer.dart';
+import 'package:calium_stream/core/constants/storage_keys.dart';
 import 'package:calium_stream/injection_container.dart';
 
 import 'package:calium_stream/core/services/notification_service.dart';
@@ -34,23 +36,21 @@ void main() async {
   await Hive.initFlutter();
 
   // Open Hive boxes for offline data
-  await Hive.openBox('favorites');
-  await Hive.openBox('favorites_deleted');
-  await Hive.openBox('history');
-  await Hive.openBox('history_deleted');
-  await Hive.openBox('preferences');
+  await AccountSession.instance.activate(null, AccountSession.instance.generation);
+  await Hive.openBox(StorageKeys.preferencesBox);
 
   // Initialize download service and restore offline download queue
   await DownloadService.instance.init();
 
   // Initialize AniList & MyAnimeList tracking service
-  await TrackingService.instance.init();
+
 
   // Initialize notifications and request permissions
   await NotificationService.instance.init();
 
   // Register all dependencies via GetIt
   await initDependencies();
+  await TrackingService.instance.init();
 
   // Start background realtime sync engine
   sl<SyncService>().start();

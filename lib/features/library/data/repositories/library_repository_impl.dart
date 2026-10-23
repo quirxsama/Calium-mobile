@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 
 import 'package:calium_stream/core/error/failures.dart';
 import 'package:calium_stream/features/library/data/datasources/library_local_datasource.dart';
@@ -19,12 +20,18 @@ class LibraryRepositoryImpl implements LibraryRepository {
 
   @override
   Future<Either<Failure, List<FavoriteEntity>>> getFavorites() async {
+    final session = AccountSession.instance;
+    final generation = session.generation;
     try {
+      if (!session.isCurrent(generation)) throw StateError('Account changed');
       // 1. Read local Hive
       final localList = await _localDataSource.getFavorites();
 
       // 2. Try fetching from Cloud
+      if (!session.isCurrent(generation)) return const Right([]);
+      if (session.userId == null) return Right(localList);
       final cloudList = await _remoteDataSource.fetchFavoritesFromCloud();
+      if (!session.isCurrent(generation)) return const Right([]);
       if (cloudList.isNotEmpty) {
         await _localDataSource.saveFavoritesBulk(cloudList);
         final merged = await _localDataSource.getFavorites();
@@ -38,6 +45,7 @@ class LibraryRepositoryImpl implements LibraryRepository {
 
       return Right(localList);
     } catch (e) {
+      if (!session.isCurrent(generation)) return const Right([]);
       final list = await _localDataSource.getFavorites();
       return Right(list);
     }
@@ -45,7 +53,10 @@ class LibraryRepositoryImpl implements LibraryRepository {
 
   @override
   Future<Either<Failure, bool>> toggleFavorite(FavoriteEntity favorite) async {
+    final session = AccountSession.instance;
+    final generation = session.generation;
     try {
+      if (!session.isCurrent(generation)) throw StateError('Account changed');
       final model = FavoriteModel(
         animeId: favorite.animeId,
         name: favorite.name,
@@ -55,8 +66,10 @@ class LibraryRepositoryImpl implements LibraryRepository {
       final isNowFavorite = await _localDataSource.toggleFavorite(model);
 
       // Cloud sync - await to ensure cloud is updated before next fetch
+      if (!session.isCurrent(generation)) throw StateError('Account changed');
       final currentList = await _localDataSource.getFavorites();
-      await _remoteDataSource.syncFavorites(currentList);
+      if (!session.isCurrent(generation)) throw StateError('Account changed');
+      if (session.userId != null) await _remoteDataSource.syncFavorites(currentList);
 
       return Right(isNowFavorite);
     } catch (e) {
@@ -66,12 +79,18 @@ class LibraryRepositoryImpl implements LibraryRepository {
 
   @override
   Future<Either<Failure, List<HistoryEntity>>> getHistory() async {
+    final session = AccountSession.instance;
+    final generation = session.generation;
     try {
+      if (!session.isCurrent(generation)) throw StateError('Account changed');
       // 1. Read local Hive
       final localList = await _localDataSource.getHistory();
 
       // 2. Try fetching from Cloud
+      if (!session.isCurrent(generation)) return const Right([]);
+      if (session.userId == null) return Right(localList);
       final cloudList = await _remoteDataSource.fetchHistoryFromCloud();
+      if (!session.isCurrent(generation)) return const Right([]);
       if (cloudList.isNotEmpty) {
         await _localDataSource.saveHistoryBulk(cloudList);
         final merged = await _localDataSource.getHistory();
@@ -79,12 +98,11 @@ class LibraryRepositoryImpl implements LibraryRepository {
       }
 
       // If local has items and cloud was empty, push local to cloud
-      if (localList.isNotEmpty) {
-        _remoteDataSource.syncHistory(localList);
-      }
+
 
       return Right(localList);
     } catch (e) {
+      if (!session.isCurrent(generation)) return const Right([]);
       final list = await _localDataSource.getHistory();
       return Right(list);
     }
@@ -92,7 +110,10 @@ class LibraryRepositoryImpl implements LibraryRepository {
 
   @override
   Future<Either<Failure, void>> removeHistoryItem(String animeId) async {
+    final session = AccountSession.instance;
+    final generation = session.generation;
     try {
+      if (!session.isCurrent(generation)) throw StateError('Account changed');
       await _localDataSource.deleteHistoryItem(animeId);
       return const Right(null);
     } catch (e) {
@@ -102,7 +123,10 @@ class LibraryRepositoryImpl implements LibraryRepository {
 
   @override
   Future<Either<Failure, void>> clearHistory() async {
+    final session = AccountSession.instance;
+    final generation = session.generation;
     try {
+      if (!session.isCurrent(generation)) throw StateError('Account changed');
       await _localDataSource.clearHistory();
       return const Right(null);
     } catch (e) {
@@ -112,7 +136,10 @@ class LibraryRepositoryImpl implements LibraryRepository {
 
   @override
   Future<Either<Failure, void>> syncWithCloud() async {
+    final session = AccountSession.instance;
+    final generation = session.generation;
     try {
+      if (!session.isCurrent(generation)) throw StateError('Account changed');
       final favorites = await _localDataSource.getFavorites();
       final history = await _localDataSource.getHistory();
 

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:calium_stream/core/error/failures.dart';
+import 'package:calium_stream/core/constants/storage_keys.dart';
+import 'package:calium_stream/core/services/app_preferences.dart';
 import 'package:calium_stream/features/player/domain/entities/intro_song_entity.dart';
 import 'package:calium_stream/features/player/domain/entities/video_source_entity.dart';
 import 'package:calium_stream/features/player/domain/usecases/get_intro_song_usecase.dart';
@@ -10,6 +12,7 @@ import 'package:calium_stream/features/player/presentation/cubit/player_cubit.da
 import 'package:dartz/dartz.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 class Sources implements GetVideoSourcesUseCase {
   final requests = <Completer<Either<Failure, EpisodeSourceEntity>>>[];
@@ -146,6 +149,63 @@ void main() {
       expect(sources.requests, isEmpty);
       expect((cubit.state as PlayerReady).selectedStream.url, file.path);
     } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('preferred audio group and quality are selected', () async {
+    final directory = await Directory.systemTemp.createTemp('calium prefs ');
+    try {
+      Hive.init(directory.path);
+      await Hive.openBox<dynamic>(StorageKeys.preferencesBox);
+      await AppPreferences.instance.setDefaultAudio('tr');
+      await AppPreferences.instance.setDefaultQuality('720p');
+
+      final pending = cubit.loadVideoSources(
+        animeId: 'a',
+        season: 1,
+        episode: 1,
+      );
+      sources.requests.single.complete(
+        Right(
+          EpisodeSourceEntity(
+            audioGroups: [
+              AudioGroupEntity(
+                name: 'Japonca',
+                group: 'original',
+                streams: [
+                  VideoStreamItemEntity(
+                    quality: '1080p',
+                    url: 'https://test/original',
+                  ),
+                ],
+              ),
+              AudioGroupEntity(
+                name: 'Türkçe',
+                group: 'tr',
+                streams: [
+                  VideoStreamItemEntity(
+                    quality: '1080p',
+                    url: 'https://test/tr1080',
+                  ),
+                  VideoStreamItemEntity(
+                    quality: '720p',
+                    url: 'https://test/tr720',
+                  ),
+                ],
+              ),
+            ],
+            subtitles: const [],
+          ),
+        ),
+      );
+      await pending;
+
+      final ready = cubit.state as PlayerReady;
+      expect(ready.selectedAudioGroup.group, 'tr');
+      expect(ready.selectedStream.quality, '720p');
+    } finally {
+      await Hive.close();
       await directory.delete(recursive: true);
     }
   });

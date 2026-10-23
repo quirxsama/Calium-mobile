@@ -7,6 +7,7 @@ import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/utils/episode_utils.dart';
+import 'package:calium_stream/core/utils/navigation_utils.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/core/widgets/app_content_frame.dart';
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
@@ -204,25 +205,14 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     );
   }
 
-  void _handleBack() {
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    } else if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return AppContentFrame(
       maxWidth: 1040,
       child: PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) {
-          if (didPop) return;
-          _handleBack();
+        canPop: canGoBack(context),
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) goBackOrHome(context);
         },
         child: Scaffold(
           backgroundColor: AppColors.background,
@@ -236,7 +226,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                 color: Colors.white,
                 size: 20,
               ),
-              onPressed: _handleBack,
+              onPressed: () => goBackOrHome(context),
             ),
             title: Text(
               'İndirilenler',

@@ -1,4 +1,6 @@
 import 'package:dio/dio.dart';
+import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
+import 'package:calium_stream/core/services/account_session.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'package:calium_stream/core/constants/api_constants.dart';
@@ -50,20 +52,31 @@ class AuthInterceptor extends Interceptor {
     RequestInterceptorHandler handler,
   ) async {
     // Only attach user token to Calium backend endpoints (auth, sync, profile, rooms)
-    final isCaliumEndpoint = options.path.startsWith('/api/auth') ||
-        options.path.startsWith('/api/sync') ||
-        options.path.startsWith('/api/account') ||
-        options.path.startsWith('/api/lists') ||
-        options.path.startsWith('/api/rooms') ||
-        options.path.startsWith('/api/users') ||
-        options.path.startsWith('/api/integrations') ||
-        options.path.startsWith('/api/tracking') ||
-        options.uri.host.contains('calium.fun');
+    final session = AccountSession.instance;
+    final generation = session.generation;
+    final isCaliumEndpoint = options.uri.origin == Uri.parse(ApiConstants.caliumBackendUrl).origin;
+    options.extra['sessionGeneration'] = generation;
 
     if (isCaliumEndpoint) {
+      options.extra.addAll(CacheOptions(store: null, policy: CachePolicy.noCache).toExtra());
+      final path = options.uri.path;
+      final publicAuth = path.startsWith('/api/auth/');
+      final accountRequest = path.startsWith('/api/sync') || path.startsWith('/api/tracking') || path.startsWith('/api/integrations');
+      if (accountRequest && (!session.ready || session.userId == null)) {
+        handler.reject(DioException(requestOptions: options, type: DioExceptionType.cancel));
+        return;
+      }
+      if (!session.ready && !publicAuth) {
+        handler.reject(DioException(requestOptions: options, type: DioExceptionType.cancel));
+        return;
+      }
       options.headers['origin'] = ApiConstants.caliumBackendUrl;
       options.headers['referer'] = '${ApiConstants.caliumBackendUrl}/';
       final token = await _secureStorage.read(key: StorageKeys.authToken);
+      if (generation != session.generation) {
+        handler.reject(DioException(requestOptions: options, type: DioExceptionType.cancel));
+        return;
+      }
       if (token != null && token.isNotEmpty) {
         options.headers['Authorization'] = 'Bearer $token';
         options.headers['Cookie'] = 'calium_session=$token';
@@ -75,16 +88,9 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
-    // Check for Set-Cookie header and save token if returned
-    final setCookie = response.headers['set-cookie']?.join(';') ?? '';
-    if (setCookie.contains('calium_session=')) {
-      final match = RegExp(r'calium_session=([^;]+)').firstMatch(setCookie);
-      if (match != null) {
-        final cookieVal = match.group(1);
-        if (cookieVal != null && cookieVal.isNotEmpty) {
-          _secureStorage.write(key: StorageKeys.authToken, value: cookieVal);
-        }
-      }
+    if (response.requestOptions.extra['sessionGeneration'] != AccountSession.instance.generation) {
+      handler.reject(DioException(requestOptions: response.requestOptions, type: DioExceptionType.cancel));
+      return;
     }
     handler.next(response);
   }
@@ -97,9 +103,12 @@ class AuthInterceptor extends Interceptor {
     final isCaliumAuth = err.requestOptions.path.startsWith('/api/auth') ||
         err.requestOptions.path.startsWith('/api/account');
 
-    if (isCaliumAuth && err.response?.statusCode == 401) {
+    if (isCaliumAuth && err.response?.statusCode == 401 &&
+        err.requestOptions.extra['sessionGeneration'] == AccountSession.instance.generation) {
+      final generation = AccountSession.instance.invalidate();
       await _secureStorage.delete(key: StorageKeys.authToken);
       await _secureStorage.delete(key: StorageKeys.refreshToken);
+      await AccountSession.instance.activate(null, generation);
       handler.reject(
         DioException(
           requestOptions: err.requestOptions,

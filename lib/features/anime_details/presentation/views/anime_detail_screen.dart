@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:calium_stream/core/services/account_session.dart';
+import 'package:calium_stream/core/utils/navigation_utils.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
@@ -48,29 +50,18 @@ class _AnimeDetailView extends StatefulWidget {
 class _AnimeDetailViewState extends State<_AnimeDetailView> {
   bool _expandedSynopsis = false;
 
-  void _back() {
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    } else if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/');
-    }
-  }
-
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: false,
-    onPopInvokedWithResult: (didPop, result) {
-      if (didPop) return;
-      _back();
+    canPop: canGoBack(context),
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) goBackOrHome(context);
     },
     child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         leading: IconButton(
           tooltip: 'Geri',
-          onPressed: _back,
+          onPressed: () => goBackOrHome(context),
           icon: const Icon(Icons.arrow_back_rounded),
         ),
         title: const Text('Anime detayları'),
@@ -158,7 +149,7 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         ValueListenableBuilder(
-          valueListenable: Hive.box('history').listenable(),
+          valueListenable: AccountSession.instance.box('history').listenable(),
           builder: (context, Box box, _) {
             final saved = box.get(detail.id);
             var season = state.selectedSeason;
@@ -204,7 +195,7 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
           children: [
             Expanded(
               child: ValueListenableBuilder(
-                valueListenable: Hive.box('favorites').listenable(),
+                valueListenable: AccountSession.instance.box('favorites').listenable(),
                 builder: (context, Box box, _) {
                   final isFav = box.containsKey(detail.id);
                   return IconButton.outlined(

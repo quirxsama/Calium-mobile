@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:calium_stream/core/widgets/app_back_scope.dart';
 import 'package:calium_stream/core/widgets/app_navigation.dart';
 import 'package:calium_stream/features/auth/presentation/views/login_screen.dart';
 import 'package:calium_stream/features/auth/presentation/views/register_screen.dart';
@@ -19,6 +20,8 @@ import 'package:calium_stream/features/settings/presentation/views/settings_scre
 import 'package:calium_stream/features/downloads/presentation/views/downloads_screen.dart';
 import 'package:calium_stream/features/profile/presentation/views/profile_screen.dart';
 import 'package:calium_stream/features/social/presentation/views/social_screen.dart';
+
+Widget _rootPage(Widget child) => AppBackScope(child: child);
 
 class _MainShell extends StatelessWidget {
   const _MainShell({required this.navigationShell});
@@ -64,12 +67,12 @@ class AppRouter {
       GoRoute(
         path: '/login',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) => _rootPage(const LoginScreen()),
       ),
       GoRoute(
         path: '/register',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const RegisterScreen(),
+        builder: (context, state) => _rootPage(const RegisterScreen()),
       ),
 
       // Main shell with bottom navigation
@@ -188,21 +191,21 @@ class AppRouter {
       GoRoute(
         path: '/calendar',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const CalendarScreen(),
+        builder: (context, state) => _rootPage(const CalendarScreen()),
       ),
 
       // User Lists
       GoRoute(
         path: '/lists',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const UserListsScreen(),
+        builder: (context, state) => _rootPage(const UserListsScreen()),
       ),
       GoRoute(
         path: '/lists/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
           final listId = state.pathParameters['id']!;
-          return ListDetailScreen(listId: listId);
+          return _rootPage(ListDetailScreen(listId: listId));
         },
       ),
 
@@ -210,21 +213,21 @@ class AppRouter {
       GoRoute(
         path: '/settings',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const SettingsScreen(),
+        builder: (context, state) => _rootPage(const SettingsScreen()),
       ),
 
       // Top 100 Leaderboard
       GoRoute(
         path: '/top-anime',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const TopAnimeScreen(),
+        builder: (context, state) => _rootPage(const TopAnimeScreen()),
       ),
 
       // Turkish Dubbed Catalog
       GoRoute(
         path: '/tr-dub',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const TrDubCatalogScreen(),
+        builder: (context, state) => _rootPage(const TrDubCatalogScreen()),
       ),
 
       // Downloads Manager
@@ -238,14 +241,14 @@ class AppRouter {
       GoRoute(
         path: '/profile',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const ProfileScreen(),
+        builder: (context, state) => _rootPage(const ProfileScreen()),
       ),
       GoRoute(
         path: '/profile/:username',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
           final username = state.pathParameters['username'];
-          return ProfileScreen(username: username);
+          return _rootPage(ProfileScreen(username: username));
         },
       ),
     ],

@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:calium_stream/core/services/account_session.dart';
+import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
@@ -56,7 +59,9 @@ class SyncService with WidgetsBindingObserver {
   }
 
   Future<void> syncNow() async {
-    if (_isSyncing) return;
+    final session = AccountSession.instance;
+    final generation = session.generation;
+    if (_isSyncing || !session.ready || session.userId == null) return;
     _isSyncing = true;
 
     try {
@@ -68,13 +73,18 @@ class SyncService with WidgetsBindingObserver {
 
       // 1. Silent Session & Profile Refresh (/api/auth/me)
       final user = await _remoteDataSource.refreshCurrentUser();
-      if (user != null) {
+      if (!session.isCurrent(generation)) return;
+      if (user != null && user.id == session.userId) {
         await _secureStorage.write(key: StorageKeys.currentUser, value: user.username);
         _userUpdateController.add(user);
       }
 
       // 2. Bidirectional History Sync (/api/sync/history)
+      if (!session.isCurrent(generation)) return;
+      await TrackingService.instance.fetchIntegrations();
+      if (!session.isCurrent(generation)) return;
       await _syncWatchHistory();
+      if (!session.isCurrent(generation)) return;
 
       // 3. Bidirectional Favorites Sync (/api/sync/favorites)
       await _syncFavorites();
@@ -92,7 +102,10 @@ class SyncService with WidgetsBindingObserver {
 
   Future<void> _syncWatchHistory() async {
     try {
-      final historyBox = Hive.box('history');
+      final session = AccountSession.instance;
+      final generation = session.generation;
+      final historyBox = session.box('history');
+      final snapshots = <String, Map<String, dynamic>>{};
 
       int toEpochMs(dynamic v) {
         if (v is num) return v.toInt();
@@ -151,6 +164,7 @@ class SyncService with WidgetsBindingObserver {
         final animeId = map['animeId']?.toString() ?? key.toString();
         if (animeId.isEmpty) continue;
 
+        snapshots[animeId] = Map<String, dynamic>.from(map);
         var epId = map['episodeId']?.toString() ?? '';
         final sNum = (map['seasonNumber'] as num?)?.toInt() ?? 1;
         final epNum = (map['episodeNumber'] as num?)?.toInt() ?? 1;
@@ -165,8 +179,7 @@ class SyncService with WidgetsBindingObserver {
                 if (ep.seasonNumber == sNum && ep.episodeNumber == epNum) {
                   if (ep.id.isNotEmpty && !ep.id.contains('_')) {
                     epId = ep.id;
-                    map['episodeId'] = epId;
-                    historyBox.put(animeId, map);
+
                   }
                   break;
                 }
@@ -204,12 +217,14 @@ class SyncService with WidgetsBindingObserver {
 
       // Upload local items to server, then mark them as synced
       if (localItemsToUpload.isNotEmpty) {
+        if (!session.isCurrent(generation)) return;
         await _remoteDataSource.uploadHistory(localItemsToUpload);
+        if (!session.isCurrent(generation)) return;
         for (final item in localItemsToUpload) {
           final animeId = item['animeId'] as String? ?? '';
           if (animeId.isEmpty) continue;
           final existing = historyBox.get(animeId);
-          if (existing is Map) {
+          if (existing is Map && mapEquals(Map<String, dynamic>.from(existing), snapshots[animeId])) {
             final cleaned = Map<String, dynamic>.from(existing);
             cleaned['dirty'] = false;
             cleaned['episodeId'] = item['episodeId'];
@@ -219,10 +234,12 @@ class SyncService with WidgetsBindingObserver {
       }
 
       // B. Download latest server history and merge into local Hive
+      if (!session.isCurrent(generation)) return;
       final serverHistory = await _remoteDataSource.getRemoteHistory();
+      if (!session.isCurrent(generation)) return;
       Box? deletedBox;
       try {
-        deletedBox = Hive.box('history_deleted');
+        deletedBox = session.box('history_deleted');
       } catch (_) {}
 
       for (final sItem in serverHistory) {
@@ -247,7 +264,7 @@ class SyncService with WidgetsBindingObserver {
         }
 
         // Keep newer local data (e.g. watched offline) untouched
-        if (existingMap != null && serverUpdated < localUpdated) continue;
+        if (existingMap != null && (existingMap['dirty'] == true || serverUpdated <= localUpdated)) continue;
 
         final serverProgress = normalizeProgress(sItem['progress']);
         final serverDuration = (sItem['duration'] as num?)?.toInt() ??
@@ -307,10 +324,12 @@ class SyncService with WidgetsBindingObserver {
 
   Future<void> _syncFavorites() async {
     try {
-      final favoritesBox = Hive.box('favorites');
+      final session = AccountSession.instance;
+      final generation = session.generation;
+      final favoritesBox = session.box('favorites');
       Box? favDeletedBox;
       try {
-        favDeletedBox = Hive.box('favorites_deleted');
+        favDeletedBox = session.box('favorites_deleted');
       } catch (_) {}
 
       // 1. Prepare local favorites to upload to server
@@ -332,11 +351,14 @@ class SyncService with WidgetsBindingObserver {
       }
 
       // If we have local changes or deletions, upload to cloud
+      if (!session.isCurrent(generation)) return;
       await _remoteDataSource.uploadFavorites(localFavoritesToUpload);
+      if (!session.isCurrent(generation)) return;
 
       // 2. Fetch server favorites and add any new items not deleted locally
       final serverFavorites = await _remoteDataSource.getRemoteFavorites();
       for (final item in serverFavorites) {
+        if (!session.isCurrent(generation)) return;
         final animeId = item['animeId']?.toString() ?? item['id']?.toString();
         if (animeId != null && animeId.isNotEmpty) {
           if (favDeletedBox != null && favDeletedBox.containsKey(animeId)) continue;
@@ -351,50 +373,60 @@ class SyncService with WidgetsBindingObserver {
   Future<void> _checkFavoriteAnimeUpdates() async {
     try {
       final prefsBox = Hive.box('preferences');
-      final favoritesBox = Hive.box('favorites');
+      final session = AccountSession.instance;
+      final generation = session.generation;
+      final favoritesBox = session.box('favorites');
 
       // 1. Check for new episodes of favorite anime
       if (favoritesBox.isNotEmpty) {
         final latest = await _remoteDataSource.getLatestEpisodes();
         for (final ep in latest) {
+          if (!session.isCurrent(generation)) return;
           final animeId = ep['animeId']?.toString() ?? ep['id']?.toString() ?? '';
           final animeTitle = ep['animeTitle']?.toString() ?? ep['name']?.toString() ?? '';
           final episodeNumber = ep['episodeNumber']?.toString() ?? ep['episode']?.toString() ?? '';
+          final seasonNumber = ep['seasonNumber']?.toString() ?? ep['season']?.toString() ?? '1';
+          final posterUrl = ep['poster']?.toString() ?? ep['image']?.toString();
 
           if (animeId.isNotEmpty && favoritesBox.containsKey(animeId)) {
-            final notifiedKey = 'notified_ep_${animeId}_$episodeNumber';
+            final notifiedKey = 'notified_ep_${animeId}_s${seasonNumber}_$episodeNumber';
             if (!prefsBox.containsKey(notifiedKey)) {
-              await prefsBox.put(notifiedKey, DateTime.now().millisecondsSinceEpoch);
-              debugPrint('🔔 Favori Anime Yeni Bölüm: $animeTitle - Bölüm $episodeNumber');
-              
-              final notifId = (animeId.hashCode ^ episodeNumber.hashCode).abs() % 100000;
+              final notifId = (animeId.hashCode ^ seasonNumber.hashCode ^ episodeNumber.hashCode).abs() % 100000;
               await NotificationService.instance.showEpisodeNotification(
                 id: notifId,
                 animeTitle: animeTitle,
                 episodeNumber: episodeNumber,
+                seasonNumber: seasonNumber,
                 animeId: animeId,
+                posterUrl: posterUrl,
               );
+              await prefsBox.put(notifiedKey, DateTime.now().millisecondsSinceEpoch);
+              debugPrint('🔔 Favori Anime Yeni Bölüm: $animeTitle - Sezon $seasonNumber Bölüm $episodeNumber');
             }
           }
         }
       }
 
       // 2. Check for incoming social notifications
+      if (!session.isCurrent(generation)) return;
       final notifs = await _remoteDataSource.getNotifications();
       for (final n in notifs) {
+        if (!session.isCurrent(generation)) return;
         final id = n['id']?.toString() ?? '';
         final read = n['read'] == true || n['readAt'] != null;
         if (!read && id.isNotEmpty) {
           final sKey = 'notified_soc_$id';
           if (!prefsBox.containsKey(sKey)) {
-            await prefsBox.put(sKey, DateTime.now().millisecondsSinceEpoch);
             final title = n['title']?.toString() ?? 'Calium';
             final body = n['body']?.toString() ?? n['message']?.toString() ?? 'Yeni bir bildiriminiz var.';
+            final type = n['type']?.toString() ?? 'general';
             await NotificationService.instance.showSocialNotification(
               id: id.hashCode.abs() % 100000,
               title: title,
               body: body,
+              payload: 'social:$type',
             );
+            await prefsBox.put(sKey, DateTime.now().millisecondsSinceEpoch);
           }
         }
       }

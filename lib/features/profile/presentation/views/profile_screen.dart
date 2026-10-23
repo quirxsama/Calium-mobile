@@ -9,6 +9,7 @@ import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/core/widgets/glass_container.dart';
 import 'package:calium_stream/core/utils/episode_utils.dart';
+import 'package:calium_stream/core/utils/navigation_utils.dart';
 import 'package:calium_stream/features/profile/domain/entities/user_profile_entity.dart';
 import 'package:calium_stream/features/profile/domain/repositories/profile_repository.dart';
 import 'package:calium_stream/features/profile/presentation/cubit/profile_cubit.dart';
@@ -86,13 +87,7 @@ class _ProfileView extends StatelessWidget {
                     elevation: 0,
                     leading: IconButton(
                       icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-                      onPressed: () {
-                        if (context.canPop()) {
-                          context.pop();
-                        } else {
-                          context.go('/');
-                        }
-                      },
+                      onPressed: () => goBackOrHome(context),
                     ),
                     actions: [
                       if (profile.isOwner) ...[
