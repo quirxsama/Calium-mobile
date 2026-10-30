@@ -56,6 +56,12 @@ This project strictly follows **Clean Architecture** principles decoupled into d
    cp .env.example .env
    ```
 
+   For push notifications, register `com.calium.app` as an Android app in the
+   same Firebase project used by the Calium web backend and fill the
+   `FIREBASE_ANDROID_*`, `FIREBASE_MESSAGING_SENDER_ID`, and
+   `FIREBASE_PROJECT_ID` values. If they are empty, the app keeps working with
+   local device notifications only.
+
 3. **Get Dependencies**:
    ```bash
    flutter pub get

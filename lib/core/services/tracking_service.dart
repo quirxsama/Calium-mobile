@@ -18,6 +18,8 @@ class TrackingService extends ChangeNotifier {
   List<Map<String, dynamic>> _entries = [];
   List<Map<String, dynamic>> _conflicts = [];
   final Set<String> _writing = {};
+  final Set<String> _busyEntries = {};
+  bool _entriesLoaded = false;
   String? lastError;
   final _session = AccountSession.instance;
 
@@ -38,7 +40,70 @@ class TrackingService extends ChangeNotifier {
   bool get isSyncing => _isSyncing;
   List<Map<String, dynamic>> get entries => List.unmodifiable(_entries.map(Map<String, dynamic>.unmodifiable));
   List<Map<String, dynamic>> get conflicts => List.unmodifiable(_conflicts.map(Map<String, dynamic>.unmodifiable));
+  bool get entriesLoaded => _entriesLoaded;
+  bool isEntryBusy(String id) => _busyEntries.contains(id);
   bool _current(int generation) => _session.isCurrent(generation) && _session.userId != null;
+
+  /// Ordered tracking status keys used by the "Kütüphanem" screen and menus.
+  static const List<String> statusOrder = ['watching', 'plan_to_watch', 'completed', 'dropped', 'on_hold'];
+
+  /// Human readable labels for tracking statuses (matches the web app copy).
+  static const Map<String, String> statusLabels = {
+    'watching': 'Devam Ediyor',
+    'plan_to_watch': 'Planlandı',
+    'completed': 'Bitirildi',
+    'dropped': 'Bırakıldı',
+    'on_hold': 'Beklemede',
+  };
+
+  static Object? _valueOf(Map<String, dynamic> entry, String key) {
+    final value = entry['value'];
+    return value is Map ? value[key] : null;
+  }
+
+  static String entryStatus(Map<String, dynamic> entry) => _valueOf(entry, 'status')?.toString() ?? '';
+
+  static int entryProgress(Map<String, dynamic> entry) {
+    final progress = _valueOf(entry, 'progress');
+    if (progress is num) return progress.toInt();
+    return int.tryParse(progress?.toString() ?? '') ?? 0;
+  }
+
+  static int entryScore(Map<String, dynamic> entry) {
+    final score = _valueOf(entry, 'score');
+    if (score is num) return score.toInt();
+    return int.tryParse(score?.toString() ?? '') ?? 0;
+  }
+
+  static String? entryPoster(Map<String, dynamic> entry) {
+    final poster = _valueOf(entry, 'poster')?.toString();
+    return poster == null || poster.isEmpty ? null : poster;
+  }
+
+  static int? entryTotalEpisodes(Map<String, dynamic> entry) {
+    final total = entry['totalEpisodes'] ?? _valueOf(entry, 'totalEpisodes');
+    if (total is num) return total.toInt();
+    return int.tryParse(total?.toString() ?? '');
+  }
+
+  /// Finds the tracking entry for an anime by exact source id, then by title.
+  Map<String, dynamic>? entryFor({String? sourceId, required String title}) {
+    if (sourceId != null && sourceId.isNotEmpty) {
+      for (final entry in _entries) {
+        if (entry['sourceId']?.toString() == sourceId) {
+          return Map<String, dynamic>.unmodifiable(entry);
+        }
+      }
+    }
+    final normalizedTitle = title.trim().toLowerCase();
+    if (normalizedTitle.isEmpty) return null;
+    for (final entry in _entries) {
+      if (entry['title']?.toString().trim().toLowerCase() == normalizedTitle) {
+        return Map<String, dynamic>.unmodifiable(entry);
+      }
+    }
+    return null;
+  }
 
   Future<void> init() async {
     if (_initialized) return;
@@ -56,6 +121,8 @@ class TrackingService extends ChangeNotifier {
     _entries = [];
     _conflicts = [];
     _writing.clear();
+    _busyEntries.clear();
+    _entriesLoaded = false;
     _isSyncing = false;
     lastError = null;
     notifyListeners();
@@ -87,6 +154,29 @@ class TrackingService extends ChangeNotifier {
     } catch (_) {
       if (_current(generation) && revision == _fetchRevision) {
         lastError = 'Takip bilgileri yenilenemedi.';
+        notifyListeners();
+      }
+      return false;
+    }
+  }
+
+  Future<bool> refreshEntries() async {
+    final generation = _session.generation;
+    if (!_current(generation)) return false;
+    final revision = ++_fetchRevision;
+    try {
+      final response = await GetIt.I<DioClient>().get('/api/tracking/entries');
+      if (!_current(generation) || revision != _fetchRevision) return false;
+      final data = response.data;
+      if (data is! Map || data['entries'] is! List) throw StateError('Invalid tracking entries response');
+      _entries = (data['entries'] as List).whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList();
+      _entriesLoaded = true;
+      lastError = null;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      if (_current(generation) && revision == _fetchRevision) {
+        lastError = 'Kütüphane yüklenemedi. Eşitle ile tekrar deneyin.';
         notifyListeners();
       }
       return false;
@@ -157,6 +247,130 @@ class TrackingService extends ChangeNotifier {
     } catch (_) {
       if (_current(generation)) await fetchIntegrations();
       return false;
+    }
+  }
+
+  /// Adds an anime to the user's library (or updates the existing entry).
+  Future<bool> addEntry({
+    required String sourceId,
+    required String title,
+    String? poster,
+    int? totalEpisodes,
+    String status = 'plan_to_watch',
+  }) async {
+    final generation = _session.generation;
+    if (!_current(generation) || sourceId.isEmpty || title.trim().isEmpty) return false;
+    if (!_busyEntries.add(sourceId)) return false;
+    notifyListeners();
+    return _mutateEntry(
+      busyKey: sourceId,
+      generation: generation,
+      fallback: 'Kütüphaneye eklenemedi.',
+      action: (dio) => dio.patch('/api/tracking/entries', data: {
+        'sourceId': sourceId,
+        'title': title,
+        'totalEpisodes': ?totalEpisodes,
+        'confirmMapping': true,
+        'value': {
+          'status': status,
+          if (poster != null && poster.isNotEmpty) 'poster': poster,
+        },
+      }),
+    );
+  }
+
+  /// Changes the status value of an existing tracking entry.
+  Future<bool> setEntryStatus(Map<String, dynamic> entry, String status) async {
+    final generation = _session.generation;
+    final id = entry['id'];
+    if (!_current(generation) || id is! String || entry['version'] is! int) return false;
+    if (!_busyEntries.add(id)) return false;
+    notifyListeners();
+    return _mutateEntry(
+      busyKey: id,
+      generation: generation,
+      fallback: 'Durum güncellenemedi.',
+      action: (dio) => dio.patch('/api/tracking/entries', data: {
+        'id': id,
+        'version': entry['version'],
+        if (entry['sourceId'] != null) 'sourceId': entry['sourceId'],
+        if (entry['title'] != null) 'title': entry['title'],
+        'confirmMapping': true,
+        'value': {'status': status},
+      }),
+    );
+  }
+
+  /// Updates the completed episode count of an existing tracking entry.
+  Future<bool> setEntryProgress(Map<String, dynamic> entry, int completedEpisodes) async {
+    final generation = _session.generation;
+    final id = entry['id'];
+    if (!_current(generation) || id is! String || entry['version'] is! int || completedEpisodes < 0) return false;
+    if (!_busyEntries.add(id)) return false;
+    notifyListeners();
+    return _mutateEntry(
+      busyKey: id,
+      generation: generation,
+      fallback: 'İlerleme kaydedilemedi.',
+      action: (dio) => dio.post('/api/tracking/progress', data: {
+        'entryId': id,
+        'version': entry['version'],
+        'completedEpisodes': completedEpisodes,
+      }),
+    );
+  }
+
+  /// Removes an entry from the user's library.
+  Future<bool> removeEntry(Map<String, dynamic> entry) async {
+    final generation = _session.generation;
+    final id = entry['id'];
+    if (!_current(generation) || id is! String) return false;
+    if (!_busyEntries.add(id)) return false;
+    notifyListeners();
+    return _mutateEntry(
+      busyKey: id,
+      generation: generation,
+      fallback: 'Kütüphaneden kaldırılamadı.',
+      action: (dio) => dio.delete('/api/tracking/entries', data: {
+        'id': id,
+        if (entry['version'] is int) 'version': entry['version'],
+      }),
+    );
+  }
+
+  Future<bool> _mutateEntry({
+    required String busyKey,
+    required int generation,
+    required String fallback,
+    required Future<void> Function(DioClient dio) action,
+  }) async {
+    try {
+      await action(GetIt.I<DioClient>());
+      if (!_current(generation)) return false;
+      await refreshEntries();
+      return true;
+    } on DioException catch (e) {
+      if (!_current(generation)) return false;
+      if (e.response?.statusCode == 409) {
+        await refreshEntries();
+        if (_current(generation)) {
+          lastError = 'İlerleme başka bir cihazda değişti. Yeniden deneyin.';
+          notifyListeners();
+        }
+      } else {
+        lastError = fallback;
+        notifyListeners();
+      }
+      return false;
+    } catch (_) {
+      if (_current(generation)) {
+        lastError = fallback;
+        notifyListeners();
+      }
+      return false;
+    } finally {
+      _busyEntries.remove(busyKey);
+      if (_current(generation)) notifyListeners();
     }
   }
 

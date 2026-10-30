@@ -33,6 +33,9 @@ class AppPreferences {
 
   bool get autoSkipIntro => _read<bool>(StorageKeys.autoSkipIntro, false);
 
+  bool get autoDownloadNewEpisodes =>
+      _read<bool>(StorageKeys.autoDownloadNewEpisodes, false);
+
   Future<void> setDefaultQuality(String value) =>
       _write(StorageKeys.preferredQuality, value);
 
@@ -53,6 +56,9 @@ class AppPreferences {
 
   Future<void> setAutoSkipIntro(bool value) =>
       _write(StorageKeys.autoSkipIntro, value);
+
+  Future<void> setAutoDownloadNewEpisodes(bool value) =>
+      _write(StorageKeys.autoDownloadNewEpisodes, value);
 
   T _read<T>(String key, T fallback) {
     final value = _box?.get(key);

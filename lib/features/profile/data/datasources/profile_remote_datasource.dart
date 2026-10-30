@@ -3,11 +3,16 @@ import 'package:calium_stream/core/constants/storage_keys.dart';
 import 'package:calium_stream/core/error/exceptions.dart';
 import 'package:calium_stream/core/network/dio_client.dart';
 import 'package:calium_stream/features/profile/data/models/user_profile_model.dart';
+import 'package:calium_stream/features/profile/domain/entities/user_profile_entity.dart';
 
 abstract class ProfileRemoteDataSource {
   Future<UserProfileModel> getUserProfile(String username);
   Future<UserProfileModel> getCurrentUserProfile();
   Future<String> toggleFollow(String username);
+  Future<ProfileCommentsResult> getUserComments(
+    String username, {
+    String? cursor,
+  });
 }
 
 class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
@@ -71,6 +76,62 @@ class ProfileRemoteDataSourceImpl implements ProfileRemoteDataSource {
     } catch (e) {
       if (e is ServerException) rethrow;
       throw ServerException(message: 'İşlem başarısız: $e');
+    }
+  }
+
+  @override
+  Future<ProfileCommentsResult> getUserComments(
+    String username, {
+    String? cursor,
+  }) async {
+    try {
+      final response = await _dioClient.get(
+        '/api/users/$username/comments',
+        queryParameters: {
+          'limit': 10,
+          if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        },
+      );
+      final data = response.data;
+      if (data is Map<String, dynamic> && data['success'] == true) {
+        final payload = data['data'];
+        if (payload is! Map<String, dynamic>) {
+          return const ProfileCommentsResult();
+        }
+
+        final comments = <ProfileCommentEntity>[];
+        final commentsRaw = payload['comments'];
+        if (commentsRaw is List) {
+          for (final raw in commentsRaw) {
+            if (raw is Map) {
+              comments.add(
+                UserProfileModel.commentFromJson(
+                  Map<String, dynamic>.from(raw),
+                ),
+              );
+            }
+          }
+        }
+
+        final nextCursorRaw = payload['nextCursor'];
+        final nextCursor = (nextCursorRaw == null ||
+                nextCursorRaw.toString().trim().isEmpty)
+            ? null
+            : nextCursorRaw.toString();
+
+        return ProfileCommentsResult(
+          comments: comments,
+          nextCursor: nextCursor,
+          visible: payload['visible'] as bool? ?? true,
+        );
+      }
+      final message = data is Map<String, dynamic>
+          ? data['error']?.toString() ?? 'Yorumlar yüklenemedi.'
+          : 'Yorumlar yüklenemedi.';
+      throw ServerException(message: message);
+    } catch (e) {
+      if (e is ServerException) rethrow;
+      throw ServerException(message: 'Yorumlar yüklenemedi: $e');
     }
   }
 }

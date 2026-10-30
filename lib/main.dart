@@ -10,7 +10,10 @@ import 'package:calium_stream/app/observer.dart';
 import 'package:calium_stream/core/constants/storage_keys.dart';
 import 'package:calium_stream/injection_container.dart';
 
+import 'package:calium_stream/core/services/app_update_service.dart';
 import 'package:calium_stream/core/services/notification_service.dart';
+import 'package:calium_stream/core/services/push_notification_service.dart';
+import 'package:calium_stream/core/services/sync_remote_datasource.dart';
 import 'package:calium_stream/core/services/sync_service.dart';
 import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
@@ -36,14 +39,16 @@ void main() async {
   await Hive.initFlutter();
 
   // Open Hive boxes for offline data
-  await AccountSession.instance.activate(null, AccountSession.instance.generation);
+  await AccountSession.instance.activate(
+    null,
+    AccountSession.instance.generation,
+  );
   await Hive.openBox(StorageKeys.preferencesBox);
 
   // Initialize download service and restore offline download queue
   await DownloadService.instance.init();
 
   // Initialize AniList & MyAnimeList tracking service
-
 
   // Initialize notifications and request permissions
   await NotificationService.instance.init();
@@ -52,12 +57,23 @@ void main() async {
   await initDependencies();
   await TrackingService.instance.init();
 
+  // Register the FCM token once the user session is available
+  await PushNotificationService.instance.init(
+    remoteDataSource: sl<SyncRemoteDataSource>(),
+  );
+
   // Start background realtime sync engine
   sl<SyncService>().start();
 
   // Set up global BLoC observer for debugging
   Bloc.observer = AppBlocObserver();
 
+  // Check the Calium APK endpoint once per launch after the first frame.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    Future.delayed(const Duration(seconds: 1), () {
+      AppUpdateService.instance.checkForUpdate();
+    });
+  });
+
   runApp(const CaliumApp());
 }
-

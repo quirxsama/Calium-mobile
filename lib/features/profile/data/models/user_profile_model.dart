@@ -14,6 +14,8 @@ class UserProfileModel extends UserProfileEntity {
     super.profilePublic,
     super.listsPublic,
     super.historyPublic,
+    super.commentsPublic,
+    super.commentsVisible,
     super.followStatus,
     super.favoritesCount,
     super.listsCount,
@@ -22,7 +24,41 @@ class UserProfileModel extends UserProfileEntity {
     super.friendsCount,
     super.recentHistory,
     super.lists,
+    super.comments,
   });
+
+  /// Parses a single comment from `GET /api/users/{username}/comments`.
+  ///
+  /// Kept defensive: every field is optional in practice because the endpoint
+  /// may evolve, and unknown/missing keys must never crash the profile screen.
+  static ProfileCommentEntity commentFromJson(Map<String, dynamic> json) {
+    final user = json['user'] as Map<String, dynamic>? ?? const {};
+    final episodeRaw = json['episodeId']?.toString();
+    final createdAtRaw = json['createdAt'];
+    DateTime? createdAt;
+    if (createdAtRaw is num) {
+      createdAt = DateTime.fromMillisecondsSinceEpoch(createdAtRaw.toInt());
+    } else if (createdAtRaw is String) {
+      createdAt = DateTime.tryParse(createdAtRaw);
+    }
+    final displayName = user['displayName']?.toString();
+    final username = user['username']?.toString();
+    return ProfileCommentEntity(
+      id: json['id']?.toString() ?? '',
+      animeId: json['animeId']?.toString() ?? '',
+      episodeId: (episodeRaw == null || episodeRaw.isEmpty) ? null : episodeRaw,
+      body: json['body']?.toString() ?? '',
+      createdAt: createdAt,
+      canDelete: json['canDelete'] as bool? ?? false,
+      authorDisplayName: (displayName != null && displayName.isNotEmpty)
+          ? displayName
+          : username,
+      authorUsername: username,
+      authorAvatarUrl: ImageUtils.cleanImageUrl(
+        user['avatarUrl']?.toString() ?? user['avatar']?.toString(),
+      ),
+    );
+  }
 
   factory UserProfileModel.fromJson(Map<String, dynamic> json) {
     final user = json['user'] as Map<String, dynamic>? ?? json;
@@ -75,6 +111,14 @@ class UserProfileModel extends UserProfileEntity {
       createdAt = DateTime.tryParse(user['createdAt'].toString());
     }
 
+    final commentsRaw = json['comments'] as List? ?? [];
+    final comments = commentsRaw
+        .whereType<Map>()
+        .map((c) => UserProfileModel.commentFromJson(
+              Map<String, dynamic>.from(c),
+            ))
+        .toList();
+
     return UserProfileModel(
       id: user['id']?.toString() ?? '',
       username: user['username']?.toString() ?? '',
@@ -87,6 +131,8 @@ class UserProfileModel extends UserProfileEntity {
       profilePublic: user['profilePublic'] as bool? ?? true,
       listsPublic: user['listsPublic'] as bool? ?? true,
       historyPublic: user['historyPublic'] as bool? ?? true,
+      commentsPublic: user['commentsPublic'] as bool? ?? true,
+      commentsVisible: json['commentsVisible'] as bool? ?? true,
       followStatus: followStatus,
       favoritesCount: (counts['favorites'] as num?)?.toInt() ?? 0,
       listsCount: (counts['lists'] as num?)?.toInt() ?? 0,
@@ -95,6 +141,7 @@ class UserProfileModel extends UserProfileEntity {
       friendsCount: (counts['friends'] as num?)?.toInt() ?? 0,
       recentHistory: recentHistory,
       lists: lists,
+      comments: comments,
     );
   }
 }

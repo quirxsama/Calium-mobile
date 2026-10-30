@@ -18,6 +18,7 @@ final class UpdateProfileRequested extends SettingsEvent {
     this.avatarUrl,
     this.isPrivate,
     this.dndEnabled,
+    this.commentsPublic,
   });
 
   final String? displayName;
@@ -25,9 +26,17 @@ final class UpdateProfileRequested extends SettingsEvent {
   final String? avatarUrl;
   final bool? isPrivate;
   final bool? dndEnabled;
+  final bool? commentsPublic;
 
   @override
-  List<Object?> get props => [displayName, bio, avatarUrl, isPrivate, dndEnabled];
+  List<Object?> get props => [
+        displayName,
+        bio,
+        avatarUrl,
+        isPrivate,
+        dndEnabled,
+        commentsPublic,
+      ];
 }
 
 final class ChangePasswordRequested extends SettingsEvent {
@@ -97,6 +106,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
       avatarUrl: event.avatarUrl,
       isPrivate: event.isPrivate,
       dndEnabled: event.dndEnabled,
+      commentsPublic: event.commentsPublic,
     );
 
     res.fold(

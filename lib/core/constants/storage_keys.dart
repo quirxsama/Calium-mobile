@@ -29,8 +29,10 @@ abstract final class StorageKeys {
   static const String gestureVolume = 'gesture_volume';
   static const String autoPlayNext = 'auto_play_next';
   static const String autoSkipIntro = 'auto_skip_intro';
+  static const String autoDownloadNewEpisodes = 'auto_download_new_episodes';
   static const String downloadQuality = 'download_quality';
   static const String downloadWifiOnly = 'download_wifi_only';
+  static const String pushInstallationId = 'push_installation_id';
 
   // ─── Watch History Keys ──────────────────────────────────────
   static const String lastWatchedPosition = 'last_watched_position';

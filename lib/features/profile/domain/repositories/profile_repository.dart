@@ -6,4 +6,8 @@ abstract class ProfileRepository {
   Future<Either<Failure, UserProfileEntity>> getUserProfile(String username);
   Future<Either<Failure, UserProfileEntity>> getCurrentUserProfile();
   Future<Either<Failure, String>> toggleFollow(String username);
+  Future<Either<Failure, ProfileCommentsResult>> getUserComments(
+    String username, {
+    String? cursor,
+  });
 }

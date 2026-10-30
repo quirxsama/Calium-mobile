@@ -4,8 +4,10 @@ import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:calium_stream/core/services/account_session.dart';
+import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/core/utils/navigation_utils.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
+import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/core/widgets/app_content_frame.dart';
@@ -49,6 +51,44 @@ class _AnimeDetailView extends StatefulWidget {
 
 class _AnimeDetailViewState extends State<_AnimeDetailView> {
   bool _expandedSynopsis = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (AccountSession.instance.userId != null) {
+        TrackingService.instance.refreshEntries();
+      }
+    });
+  }
+
+  Future<void> _openLibrarySheet(AnimeDetailEntity detail) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (AccountSession.instance.userId == null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('Kütüphanem için giriş yapmalısın.'),
+          action: SnackBarAction(
+            label: 'Giriş yap',
+            onPressed: () => context.push('/login'),
+          ),
+        ),
+      );
+      return;
+    }
+    final tracking = TrackingService.instance;
+    if (!tracking.entriesLoaded && tracking.entries.isEmpty) {
+      await tracking.refreshEntries();
+      if (!mounted) return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _LibraryEntrySheet(detail: detail),
+    );
+  }
 
   @override
   Widget build(BuildContext context) => PopScope(
@@ -269,6 +309,31 @@ class _AnimeDetailViewState extends State<_AnimeDetailView> {
                       },
               ),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ListenableBuilder(
+                listenable: TrackingService.instance,
+                builder: (context, _) {
+                  final entry = TrackingService.instance.entryFor(
+                    sourceId: detail.id,
+                    title: detail.title,
+                  );
+                  final inLibrary = entry != null;
+                  return IconButton.outlined(
+                    tooltip: inLibrary ? 'Kütüphanemde' : 'Kütüphaneme ekle',
+                    onPressed: () => _openLibrarySheet(detail),
+                    icon: Icon(
+                      inLibrary
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_border_rounded,
+                      color: inLibrary
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
+                    ),
+                  );
+                },
+              ),
+            ),
           ],
         ),
         if (detail.genres.isNotEmpty) ...[
@@ -477,4 +542,209 @@ class _DetailHeader extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// Bottom sheet that adds the anime to the tracking library or edits its status.
+class _LibraryEntrySheet extends StatefulWidget {
+  const _LibraryEntrySheet({required this.detail});
+  final AnimeDetailEntity detail;
+
+  @override
+  State<_LibraryEntrySheet> createState() => _LibraryEntrySheetState();
+}
+
+class _LibraryEntrySheetState extends State<_LibraryEntrySheet> {
+  bool _busy = false;
+
+  Future<void> _run(Future<bool> Function() action, String successMessage) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    final succeeded = await action();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    Navigator.of(context).pop();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          succeeded
+              ? successMessage
+              : (TrackingService.instance.lastError ?? 'İşlem tamamlanamadı.'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _add(String status) => _run(
+    () => TrackingService.instance.addEntry(
+      sourceId: widget.detail.id,
+      title: widget.detail.title,
+      poster: widget.detail.posterUrl,
+      totalEpisodes: widget.detail.totalEpisodes,
+      status: status,
+    ),
+    'Kütüphanene eklendi.',
+  );
+
+  Future<void> _changeStatus(Map<String, dynamic> entry, String status) =>
+      _run(
+        () => TrackingService.instance.setEntryStatus(entry, status),
+        'Durum güncellendi.',
+      );
+
+  Future<void> _remove(Map<String, dynamic> entry) => _run(
+    () => TrackingService.instance.removeEntry(entry),
+    'Kütüphaneden kaldırıldı.',
+  );
+
+  IconData _statusIcon(String status) {
+    switch (status) {
+      case 'watching':
+        return Icons.play_circle_outline_rounded;
+      case 'plan_to_watch':
+        return Icons.schedule_rounded;
+      case 'completed':
+        return Icons.check_circle_outline_rounded;
+      case 'dropped':
+        return Icons.remove_circle_outline_rounded;
+      case 'on_hold':
+        return Icons.pause_circle_outline_rounded;
+      default:
+        return Icons.circle_outlined;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tracking = TrackingService.instance;
+    final entry = tracking.entryFor(
+      sourceId: widget.detail.id,
+      title: widget.detail.title,
+    );
+    final currentStatus = entry == null
+        ? ''
+        : TrackingService.entryStatus(entry);
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceDark,
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.borderRadiusXl),
+        ),
+      ),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    entry == null ? 'Kütüphaneme ekle' : 'Kütüphanemde',
+                    style: AppTypography.titleMedium.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (_busy)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.primary,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              widget.detail.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            if (entry == null)
+              for (final option in const [
+                ('plan_to_watch', Icons.schedule_rounded),
+                ('watching', Icons.play_circle_outline_rounded),
+                ('completed', Icons.check_circle_outline_rounded),
+              ])
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  enabled: !_busy,
+                  leading: Icon(option.$2, color: AppColors.textSecondary),
+                  title: Text(
+                    TrackingService.statusLabels[option.$1] ?? option.$1,
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  onTap: () => _add(option.$1),
+                )
+            else ...[
+              for (final key in TrackingService.statusOrder)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  enabled: !_busy && currentStatus != key,
+                  leading: Icon(
+                    _statusIcon(key),
+                    color: currentStatus == key
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
+                  ),
+                  title: Text(
+                    TrackingService.statusLabels[key] ?? key,
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: currentStatus == key
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  trailing: currentStatus == key
+                      ? const Icon(
+                          Icons.check_rounded,
+                          color: AppColors.primary,
+                        )
+                      : null,
+                  onTap: () => _changeStatus(entry, key),
+                ),
+              const Divider(color: AppColors.border),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                enabled: !_busy,
+                leading: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppColors.accentCrimson,
+                ),
+                title: Text(
+                  'Kütüphaneden kaldır',
+                  style: AppTypography.bodyMedium.copyWith(
+                    color: AppColors.accentCrimson,
+                  ),
+                ),
+                onTap: () => _remove(entry),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -42,7 +42,7 @@ class _MainShell extends StatelessWidget {
 }
 
 class AppRouter {
-  static final _rootNavigatorKey = GlobalKey<NavigatorState>();
+  static final rootNavigatorKey = GlobalKey<NavigatorState>();
   static final _shellNavigatorHomeKey = GlobalKey<NavigatorState>(
     debugLabel: 'home',
   );
@@ -60,18 +60,18 @@ class AppRouter {
   );
 
   static final GoRouter router = GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     routes: [
       // Auth routes
       GoRoute(
         path: '/login',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => _rootPage(const LoginScreen()),
       ),
       GoRoute(
         path: '/register',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => _rootPage(const RegisterScreen()),
       ),
 
@@ -147,7 +147,7 @@ class AppRouter {
       // Anime Detail (direct route)
       GoRoute(
         path: '/anime/:id',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final animeId = state.pathParameters['id']!;
           return AnimeDetailScreen(animeId: animeId);
@@ -157,7 +157,7 @@ class AppRouter {
       // Player (full screen, landscape)
       GoRoute(
         path: '/watch/:animeId',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final animeId = state.pathParameters['animeId'] ?? '';
           final animeTitle = state.uri.queryParameters['title'] ?? 'Anime';
@@ -190,19 +190,19 @@ class AppRouter {
       // Weekly Airing Calendar
       GoRoute(
         path: '/calendar',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => _rootPage(const CalendarScreen()),
       ),
 
       // User Lists
       GoRoute(
         path: '/lists',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => _rootPage(const UserListsScreen()),
       ),
       GoRoute(
         path: '/lists/:id',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final listId = state.pathParameters['id']!;
           return _rootPage(ListDetailScreen(listId: listId));
@@ -212,40 +212,40 @@ class AppRouter {
       // Settings & Profile Editor
       GoRoute(
         path: '/settings',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => _rootPage(const SettingsScreen()),
       ),
 
       // Top 100 Leaderboard
       GoRoute(
         path: '/top-anime',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => _rootPage(const TopAnimeScreen()),
       ),
 
       // Turkish Dubbed Catalog
       GoRoute(
         path: '/tr-dub',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => _rootPage(const TrDubCatalogScreen()),
       ),
 
       // Downloads Manager
       GoRoute(
         path: '/downloads',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const DownloadsScreen(),
       ),
 
       // Profile & User View
       GoRoute(
         path: '/profile',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => _rootPage(const ProfileScreen()),
       ),
       GoRoute(
         path: '/profile/:username',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final username = state.pathParameters['username'];
           return _rootPage(ProfileScreen(username: username));

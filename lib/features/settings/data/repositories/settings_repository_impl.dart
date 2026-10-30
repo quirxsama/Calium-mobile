@@ -11,6 +11,7 @@ abstract class SettingsRepository {
     String? avatarUrl,
     bool? isPrivate,
     bool? dndEnabled,
+    bool? commentsPublic,
   });
 
   Future<Either<Failure, void>> changePassword({
@@ -31,6 +32,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
     String? avatarUrl,
     bool? isPrivate,
     bool? dndEnabled,
+    bool? commentsPublic,
   }) async {
     try {
       final user = await _remoteDataSource.updateProfile(
@@ -39,6 +41,7 @@ class SettingsRepositoryImpl implements SettingsRepository {
         avatarUrl: avatarUrl,
         isPrivate: isPrivate,
         dndEnabled: dndEnabled,
+        commentsPublic: commentsPublic,
       );
       return Right(user);
     } on ServerException catch (e) {

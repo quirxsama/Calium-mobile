@@ -12,7 +12,7 @@ class NotificationService {
 
   bool _initialized = false;
 
-  static const String _channelEpisodesId = 'calium_episodes';
+  static const String _channelEpisodesId = 'anime_episodes';
   static const String _channelEpisodesName = 'Yeni Bölüm Bildirimleri';
   static const String _channelSocialId = 'calium_social';
   static const String _channelSocialName = 'Sosyal Bildirimler';
@@ -22,8 +22,9 @@ class NotificationService {
   Future<void> init() async {
     if (_initialized) return;
 
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const initSettings = InitializationSettings(android: androidSettings);
 
     await _notificationsPlugin.initialize(
@@ -37,7 +38,8 @@ class NotificationService {
     // Create high-importance Android Notification Channels
     final androidImplementation = _notificationsPlugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+          AndroidFlutterLocalNotificationsPlugin
+        >();
 
     if (androidImplementation != null) {
       await androidImplementation.createNotificationChannel(
@@ -78,8 +80,8 @@ class NotificationService {
     // Request notification permission
     await requestPermission();
 
-    final launchDetails =
-        await _notificationsPlugin.getNotificationAppLaunchDetails();
+    final launchDetails = await _notificationsPlugin
+        .getNotificationAppLaunchDetails();
     if (launchDetails?.didNotificationLaunchApp ?? false) {
       final payload = launchDetails?.notificationResponse?.payload;
       if (payload != null && payload.isNotEmpty) {
@@ -126,17 +128,28 @@ class NotificationService {
     required String episodeNumber,
     String? seasonNumber,
     String? animeId,
-    String? posterUrl,
   }) async {
-    try {
-      final seasonPrefix = seasonNumber != null &&
-              seasonNumber.isNotEmpty &&
-              seasonNumber != '1'
-          ? 'Sezon $seasonNumber '
-          : '';
-      final bodyText =
-          '$animeTitle - ${seasonPrefix}Bölüm $episodeNumber yayında. Hemen izle!';
+    final seasonPrefix =
+        seasonNumber != null && seasonNumber.isNotEmpty && seasonNumber != '1'
+        ? 'Sezon $seasonNumber '
+        : '';
+    await showPushNotification(
+      id: id,
+      title: '🔥 Yeni Bölüm: $animeTitle',
+      body:
+          '$animeTitle - ${seasonPrefix}Bölüm $episodeNumber yayında. Hemen izle!',
+      payload: animeId != null ? 'anime:$animeId' : null,
+    );
+  }
 
+  Future<void> showPushNotification({
+    required int id,
+    required String title,
+    required String body,
+    String? payload,
+  }) async {
+    if (!_initialized) return;
+    try {
       final androidDetails = AndroidNotificationDetails(
         _channelEpisodesId,
         _channelEpisodesName,
@@ -144,24 +157,18 @@ class NotificationService {
         priority: Priority.high,
         showWhen: true,
         icon: '@mipmap/ic_launcher',
-        styleInformation: BigTextStyleInformation(
-          bodyText,
-          contentTitle: '🔥 Yeni Bölüm: $animeTitle',
-          summaryText: '${seasonPrefix}Bölüm $episodeNumber',
-        ),
+        styleInformation: BigTextStyleInformation(body, contentTitle: title),
       );
-
-      final details = NotificationDetails(android: androidDetails);
 
       await _notificationsPlugin.show(
         id,
-        '🔥 Yeni Bölüm: $animeTitle',
-        bodyText,
-        details,
-        payload: animeId != null ? 'anime:$animeId' : null,
+        title,
+        body,
+        NotificationDetails(android: androidDetails),
+        payload: payload,
       );
     } catch (e) {
-      debugPrint('⚠️ Show notification error: $e');
+      debugPrint('⚠️ Show push notification error: $e');
     }
   }
 

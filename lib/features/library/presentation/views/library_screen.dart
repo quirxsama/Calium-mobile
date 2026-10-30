@@ -6,11 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'package:calium_stream/core/theme/app_colors.dart';
 import 'package:calium_stream/core/theme/app_spacing.dart';
 import 'package:calium_stream/core/theme/app_typography.dart';
+import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:calium_stream/core/widgets/anime_poster_card.dart';
 import 'package:calium_stream/core/widgets/adaptive_poster_grid.dart';
 import 'package:calium_stream/core/widgets/app_content_frame.dart';
 import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/core/widgets/app_status_view.dart';
+import 'package:calium_stream/core/widgets/shimmer_placeholder.dart';
 import 'package:calium_stream/core/utils/episode_utils.dart';
 import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
 import 'package:calium_stream/features/auth/presentation/bloc/auth_bloc.dart';
@@ -34,9 +36,9 @@ class _LibraryScreenState extends State<LibraryScreen>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 3,
+      length: 4,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 2),
+      initialIndex: widget.initialTab.clamp(0, 3),
     );
     context.read<LibraryBloc>().add(LoadLibraryRequested());
     context.read<AuthBloc>().add(CheckAuthRequested());
@@ -47,7 +49,7 @@ class _LibraryScreenState extends State<LibraryScreen>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialTab != widget.initialTab &&
         _tabController.index != widget.initialTab) {
-      _tabController.animateTo(widget.initialTab.clamp(0, 2));
+      _tabController.animateTo(widget.initialTab.clamp(0, 3));
     }
   }
 
@@ -207,6 +209,7 @@ class _LibraryScreenState extends State<LibraryScreen>
             Tab(text: 'Profil'),
             Tab(text: 'Favoriler'),
             Tab(text: 'Geçmiş'),
+            Tab(text: 'Kütüphanem'),
           ],
         ),
       ),
@@ -259,6 +262,7 @@ class _LibraryScreenState extends State<LibraryScreen>
                       : '',
                   history.isNotEmpty,
                 ),
+                _buildTrackingTab(),
               ],
             );
           },
@@ -823,6 +827,813 @@ class _LibraryScreenState extends State<LibraryScreen>
             ),
           );
         },
+      ),
+    );
+  }
+
+  // ─── 4. KÜTÜPHANEM SEKMESİ ──────────────────────────────────────
+
+  Widget _buildTrackingTab() {
+    return AppContentFrame(
+      maxWidth: 760,
+      child: const _TrackingLibraryTab(),
+    );
+  }
+}
+
+/// Colours mirror the web app's tracking status palette.
+const Color _trackingWatchingColor = Color(0xFF60A5FA);
+const Color _trackingPlannedColor = Color(0xFFA78BFA);
+
+/// "Kütüphanem" tab: the cross-device tracking library (status + progress).
+class _TrackingLibraryTab extends StatefulWidget {
+  const _TrackingLibraryTab();
+
+  @override
+  State<_TrackingLibraryTab> createState() => _TrackingLibraryTabState();
+}
+
+class _TrackingLibraryTabState extends State<_TrackingLibraryTab> {
+  static const Map<String, String> _filters = {
+    'all': 'Tümü',
+    'watching': 'İzleniyor',
+    'plan_to_watch': 'Planlandı',
+    'completed': 'Bitirildi',
+    'dropped': 'Bırakıldı',
+  };
+
+  final TextEditingController _searchController = TextEditingController();
+  String _filter = 'all';
+  String _query = '';
+  String? _loadedUser;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Loads the tracking library the first time the tab is visible for a user.
+  void _loadForUser(AuthState auth) {
+    final userId = auth is Authenticated ? auth.user.id : null;
+    if (userId == _loadedUser) return;
+    _loadedUser = userId;
+    if (userId != null) TrackingService.instance.refreshEntries();
+  }
+
+  Future<void> _handleSync() async {
+    final tracking = TrackingService.instance;
+    await tracking.triggerSync();
+    await tracking.refreshEntries();
+  }
+
+  void _clearSearch() {
+    setState(() {
+      _query = '';
+      _searchController.clear();
+    });
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _filter = 'all';
+      _query = '';
+      _searchController.clear();
+    });
+  }
+
+  List<Map<String, dynamic>> _filteredEntries(
+    List<Map<String, dynamic>> entries,
+  ) {
+    final query = _query.trim().toLowerCase();
+    return entries.where((entry) {
+      if (_filter != 'all' && TrackingService.entryStatus(entry) != _filter) {
+        return false;
+      }
+      if (query.isNotEmpty) {
+        final title = entry['title']?.toString().toLowerCase() ?? '';
+        if (!title.contains(query)) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  void _openEntry(Map<String, dynamic> entry) {
+    final sourceId = entry['sourceId']?.toString() ?? '';
+    if (sourceId.isNotEmpty) {
+      context.push('/anime/${Uri.encodeComponent(sourceId)}');
+      return;
+    }
+    final title = entry['title']?.toString() ?? '';
+    if (title.isEmpty) return;
+    context.push('/search?q=${Uri.encodeComponent(title)}');
+  }
+
+  Future<void> _confirmRemove(Map<String, dynamic> entry) async {
+    final title = entry['title']?.toString() ?? 'Bu anime';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: AppColors.surfaceDark,
+        title: const Text(
+          'Kütüphaneden kaldırılsın mı?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          '"$title" takip listenden kaldırılacak.',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('İptal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentCrimson,
+            ),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text('Kaldır'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await TrackingService.instance.removeEntry(entry);
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'watching':
+        return _trackingWatchingColor;
+      case 'plan_to_watch':
+        return _trackingPlannedColor;
+      case 'completed':
+        return AppColors.successGreen;
+      case 'dropped':
+        return AppColors.accentCrimson;
+      case 'on_hold':
+        return AppColors.ratingAmber;
+      default:
+        return AppColors.textSecondary;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<AuthBloc, AuthState>(
+      builder: (context, auth) {
+        if (auth is AuthInitial || auth is AuthLoading) {
+          return const Center(
+            child: CircularProgressIndicator(semanticsLabel: 'Kütüphane yükleniyor'),
+          );
+        }
+        if (auth is! Authenticated) {
+          _loadForUser(auth);
+          return _buildLoginGate();
+        }
+        _loadForUser(auth);
+        return ListenableBuilder(
+          listenable: TrackingService.instance,
+          builder: (context, _) => _buildLibrary(TrackingService.instance),
+        );
+      },
+    );
+  }
+
+  Widget _buildLibrary(TrackingService tracking) {
+    final entries = tracking.entries;
+    final filtered = _filteredEntries(entries);
+    final error = tracking.lastError;
+
+    if (!tracking.entriesLoaded && entries.isEmpty && error == null) {
+      return _buildSkeleton();
+    }
+    if (entries.isEmpty && error != null) {
+      return AppStatusView(
+        title: 'Kütüphane yüklenemedi',
+        message: error,
+        icon: Icons.error_outline_rounded,
+        actions: [
+          FilledButton(
+            onPressed: _handleSync,
+            child: const Text('Yeniden dene'),
+          ),
+        ],
+      );
+    }
+
+    final Widget content;
+    if (entries.isEmpty) {
+      content = _buildEmptyState();
+    } else if (filtered.isEmpty) {
+      content = _buildNoResults();
+    } else {
+      content = _buildEntryList(filtered, tracking);
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => tracking.refreshEntries(),
+      color: AppColors.primary,
+      child: Column(
+        children: [
+          _buildHeader(tracking),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.screenPadding,
+                0,
+                AppSpacing.screenPadding,
+                AppSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    size: 16,
+                    color: AppColors.accentCrimson,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      error,
+                      style: AppTypography.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _handleSync,
+                    child: const Text('Yeniden dene'),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(child: content),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(TrackingService tracking) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenPadding,
+        AppSpacing.md,
+        AppSpacing.screenPadding,
+        0,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value),
+                  textInputAction: TextInputAction.search,
+                  style: AppTypography.bodySmall.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Kütüphanende ara...',
+                    hintStyle: AppTypography.bodySmall.copyWith(
+                      color: AppColors.textMuted,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      size: 20,
+                      color: AppColors.textMuted,
+                    ),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Aramayı temizle',
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: AppColors.textMuted,
+                            ),
+                            onPressed: _clearSearch,
+                          ),
+                    filled: true,
+                    fillColor: AppColors.surfaceDark,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.sm,
+                      horizontal: AppSpacing.md,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(
+                        AppSpacing.borderRadiusMd,
+                      ),
+                      borderSide: const BorderSide(
+                        color: AppColors.border,
+                        width: 0.5,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(
+                        AppSpacing.borderRadiusMd,
+                      ),
+                      borderSide: const BorderSide(
+                        color: AppColors.border,
+                        width: 0.5,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(
+                        AppSpacing.borderRadiusMd,
+                      ),
+                      borderSide: const BorderSide(
+                        color: AppColors.primary,
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              IconButton(
+                tooltip: 'Eşitle',
+                onPressed: tracking.isSyncing ? null : _handleSync,
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.surfaceDark,
+                  side: const BorderSide(color: AppColors.border, width: 0.5),
+                ),
+                icon: tracking.isSyncing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : const Icon(Icons.sync_rounded, color: AppColors.primary),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final filter in _filters.entries)
+                  _buildFilterChip(filter.key, filter.value),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String key, String label) {
+    final selected = _filter == key;
+    return Padding(
+      padding: const EdgeInsets.only(right: AppSpacing.sm),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        visualDensity: VisualDensity.compact,
+        onSelected: (_) => setState(() => _filter = key),
+        backgroundColor: AppColors.surfaceDark,
+        selectedColor: AppColors.primary.withValues(alpha: 0.18),
+        side: BorderSide(
+          color: selected ? AppColors.primary : AppColors.border,
+          width: 0.8,
+        ),
+        labelStyle: AppTypography.bodySmall.copyWith(
+          color: selected ? AppColors.primary : AppColors.textSecondary,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSkeleton() {
+    return ListView.separated(
+      padding: const EdgeInsets.all(AppSpacing.screenPadding),
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 5,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+      itemBuilder: (_, _) =>
+          const ShimmerPlaceholder(height: 104, borderRadius: AppSpacing.borderRadiusMd),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return AppStatusView(
+      title: 'Kütüphanen boş',
+      message:
+          'Takip ettiğin animeler burada listelenecek. Anime detay sayfasından kütüphanene ekleyebilirsin.',
+      icon: Icons.collections_bookmark_outlined,
+      actions: [
+        FilledButton(
+          onPressed: () => context.go('/explore'),
+          child: const Text('Keşfete göz at'),
+        ),
+        TextButton(
+          onPressed: () => TrackingService.instance.refreshEntries(),
+          child: const Text('Yenile'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNoResults() {
+    return AppStatusView(
+      title: 'Sonuç bulunamadı',
+      message: 'Araman veya filtrenle eşleşen anime yok.',
+      icon: Icons.search_off_rounded,
+      actions: [
+        TextButton(
+          onPressed: _clearFilters,
+          child: const Text('Filtreleri temizle'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEntryList(
+    List<Map<String, dynamic>> entries,
+    TrackingService tracking,
+  ) {
+    return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
+      scrollCacheExtent: ScrollCacheExtent.pixels(500),
+      addRepaintBoundaries: true,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.screenPadding,
+        0,
+        AppSpacing.screenPadding,
+        AppSpacing.xxl,
+      ),
+      itemCount: entries.length,
+      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+      itemBuilder: (context, index) =>
+          _buildEntryCard(entries[index], tracking),
+    );
+  }
+
+  Widget _buildEntryCard(
+    Map<String, dynamic> entry,
+    TrackingService tracking,
+  ) {
+    final id = entry['id']?.toString() ?? '';
+    final title = entry['title']?.toString() ?? 'Bilinmeyen anime';
+    final status = TrackingService.entryStatus(entry);
+    final progress = TrackingService.entryProgress(entry);
+    final total = TrackingService.entryTotalEpisodes(entry);
+    final score = TrackingService.entryScore(entry);
+    final poster = TrackingService.entryPoster(entry);
+    final busy = tracking.isEntryBusy(id);
+    final statusColor = _statusColor(status);
+    final hasTotal = total != null && total > 0;
+    final canDecrease = !busy && progress > 0;
+    final canIncrease = !busy && (!hasTotal || progress < total);
+
+    return Material(
+      color: AppColors.surfaceDark,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+        side: const BorderSide(color: AppColors.border, width: 0.5),
+      ),
+      child: InkWell(
+        onTap: () => _openEntry(entry),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.sm),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
+                child: AppCachedImage(
+                  imageUrl: poster,
+                  width: 64,
+                  height: 92,
+                  fit: BoxFit.cover,
+                  errorWidget: Container(
+                    width: 64,
+                    height: 92,
+                    color: AppColors.surfaceElevated,
+                    child: const Icon(
+                      Icons.movie_outlined,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.titleSmall.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (score > 0) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          _buildScoreBadge(score),
+                        ],
+                        _buildOverflowMenu(entry, status, busy),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _buildStatusChip(status, statusColor),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            hasTotal
+                                ? '$progress/$total bölüm'
+                                : '$progress bölüm',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      children: [
+                        _buildProgressButton(
+                          icon: Icons.remove_rounded,
+                          tooltip: 'Bölüm azalt',
+                          onPressed: canDecrease
+                              ? () => tracking.setEntryProgress(
+                                  entry,
+                                  progress - 1,
+                                )
+                              : null,
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm,
+                            ),
+                            child: hasTotal
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(2),
+                                    child: LinearProgressIndicator(
+                                      value: (progress / total).clamp(0.0, 1.0),
+                                      backgroundColor: AppColors.surfaceElevated,
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(
+                                            AppColors.primary,
+                                          ),
+                                      minHeight: 4,
+                                      semanticsLabel: 'Bölüm ilerlemesi',
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ),
+                        _buildProgressButton(
+                          icon: Icons.add_rounded,
+                          tooltip: 'Bölüm artır',
+                          onPressed: canIncrease
+                              ? () => tracking.setEntryProgress(
+                                  entry,
+                                  progress + 1,
+                                )
+                              : null,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScoreBadge(int score) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.ratingAmber.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.star_rounded,
+            size: 13,
+            color: AppColors.ratingAmber,
+          ),
+          const SizedBox(width: 2),
+          Text(
+            (score / 10).toStringAsFixed(1),
+            style: AppTypography.caption.copyWith(
+              color: AppColors.ratingAmber,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip(String status, Color color) {
+    final label = TrackingService.statusLabels[status] ??
+        (status.isEmpty ? 'Durum yok' : status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusSm),
+        border: Border.all(color: color.withValues(alpha: 0.45), width: 0.8),
+      ),
+      child: Text(
+        label,
+        style: AppTypography.caption.copyWith(
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProgressButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      iconSize: 20,
+      visualDensity: VisualDensity.compact,
+      style: IconButton.styleFrom(
+        minimumSize: const Size(44, 44),
+        padding: EdgeInsets.zero,
+        backgroundColor: AppColors.surfaceElevated,
+        disabledBackgroundColor: AppColors.surfaceElevated.withValues(
+          alpha: 0.4,
+        ),
+        side: const BorderSide(color: AppColors.border, width: 0.5),
+      ),
+      icon: Icon(
+        icon,
+        color: onPressed == null ? AppColors.textMuted : AppColors.textPrimary,
+      ),
+    );
+  }
+
+  Widget _buildOverflowMenu(
+    Map<String, dynamic> entry,
+    String status,
+    bool busy,
+  ) {
+    return PopupMenuButton<String>(
+      tooltip: 'Seçenekler',
+      enabled: !busy,
+      color: AppColors.surfaceDark,
+      onSelected: (value) {
+        if (value == 'remove') {
+          _confirmRemove(entry);
+          return;
+        }
+        if (value.startsWith('status:')) {
+          final next = value.substring('status:'.length);
+          if (next != status) {
+            TrackingService.instance.setEntryStatus(entry, next);
+          }
+        }
+      },
+      itemBuilder: (context) => [
+        for (final key in TrackingService.statusOrder)
+          PopupMenuItem<String>(
+            value: 'status:$key',
+            height: 44,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  child: key == status
+                      ? const Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: AppColors.primary,
+                        )
+                      : null,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  TrackingService.statusLabels[key] ?? key,
+                  style: AppTypography.bodySmall.copyWith(
+                    color: key == status
+                        ? AppColors.primary
+                        : AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'remove',
+          height: 44,
+          child: Row(
+            children: [
+              const Icon(
+                Icons.delete_outline_rounded,
+                size: 16,
+                color: AppColors.accentCrimson,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Kütüphaneden kaldır',
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.accentCrimson,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+      icon: const Icon(
+        Icons.more_vert_rounded,
+        size: 20,
+        color: AppColors.textSecondary,
+      ),
+    );
+  }
+
+  Widget _buildLoginGate() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.35),
+                ),
+              ),
+              child: const Icon(
+                Icons.collections_bookmark_rounded,
+                color: AppColors.primary,
+                size: 34,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Kütüphaneni görmek için giriş yap',
+              textAlign: TextAlign.center,
+              style: AppTypography.headlineMedium.copyWith(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Takip ettiğin animeler, izleme durumların ve bölüm ilerlemen burada listelenir.',
+              textAlign: TextAlign.center,
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            FilledButton.icon(
+              onPressed: () => context.push('/login'),
+              icon: const Icon(Icons.login_rounded, size: 18),
+              label: const Text('Giriş Yap'),
+            ),
+          ],
+        ),
       ),
     );
   }

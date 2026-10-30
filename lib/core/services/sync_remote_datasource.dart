@@ -10,14 +10,12 @@ abstract class SyncRemoteDataSource {
   Future<void> uploadFavorites(List<Map<String, dynamic>> favoriteItems);
   Future<List<Map<String, dynamic>>> getLatestEpisodes();
   Future<List<Map<String, dynamic>>> getNotifications();
-  Future<void> registerDeviceToken({
+  Future<bool> registerDeviceToken({
     required String token,
     required String installationId,
     String platform = 'android',
   });
-  Future<void> unregisterDeviceToken({
-    required String installationId,
-  });
+  Future<void> unregisterDeviceToken({required String installationId});
 }
 
 class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
@@ -30,7 +28,9 @@ class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
     try {
       final response = await _dioClient.get('/api/auth/me');
       final data = response.data;
-      if (data is Map<String, dynamic> && data['success'] == true && data['user'] != null) {
+      if (data is Map<String, dynamic> &&
+          data['success'] == true &&
+          data['user'] != null) {
         return UserModel.fromJson(data['user'] as Map<String, dynamic>);
       }
       return null;
@@ -123,7 +123,7 @@ class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
   }
 
   @override
-  Future<void> registerDeviceToken({
+  Future<bool> registerDeviceToken({
     required String token,
     required String installationId,
     String platform = 'android',
@@ -137,19 +137,18 @@ class SyncRemoteDataSourceImpl implements SyncRemoteDataSource {
           'platform': platform,
         },
       );
-    } catch (_) {}
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
-  Future<void> unregisterDeviceToken({
-    required String installationId,
-  }) async {
+  Future<void> unregisterDeviceToken({required String installationId}) async {
     try {
       await _dioClient.delete(
         '/api/notifications/devices',
-        data: {
-          'installationId': installationId,
-        },
+        data: {'installationId': installationId},
       );
     } catch (_) {}
   }

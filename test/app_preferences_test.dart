@@ -28,6 +28,7 @@ void main() {
     expect(prefs.gestureVolume, isTrue);
     expect(prefs.autoNext, isTrue);
     expect(prefs.autoSkipIntro, isFalse);
+    expect(prefs.autoDownloadNewEpisodes, isFalse);
   });
 
   test('player preferences persist across box reopen', () async {
@@ -41,6 +42,7 @@ void main() {
     await prefs.setGestureVolume(false);
     await prefs.setAutoNext(false);
     await prefs.setAutoSkipIntro(true);
+    await prefs.setAutoDownloadNewEpisodes(true);
 
     await box.close();
     box = await Hive.openBox<dynamic>(StorageKeys.preferencesBox);
@@ -52,6 +54,7 @@ void main() {
     expect(prefs.gestureVolume, isFalse);
     expect(prefs.autoNext, isFalse);
     expect(prefs.autoSkipIntro, isTrue);
+    expect(prefs.autoDownloadNewEpisodes, isTrue);
 
     await box.close();
   });

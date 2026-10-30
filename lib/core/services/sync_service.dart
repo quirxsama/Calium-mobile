@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:calium_stream/core/services/account_session.dart';
 import 'package:calium_stream/core/services/tracking_service.dart';
@@ -7,16 +8,16 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:calium_stream/core/constants/storage_keys.dart';
+import 'package:calium_stream/core/services/app_preferences.dart';
 import 'package:calium_stream/core/services/notification_service.dart';
+import 'package:calium_stream/core/services/push_notification_service.dart';
 import 'package:calium_stream/core/services/sync_remote_datasource.dart';
 import 'package:calium_stream/features/anime_details/domain/repositories/anime_detail_repository.dart';
 import 'package:calium_stream/features/auth/domain/entities/user_entity.dart';
+import 'package:calium_stream/features/downloads/data/datasources/download_service.dart';
 
 class SyncService with WidgetsBindingObserver {
-  SyncService({
-    required this._remoteDataSource,
-    required this._secureStorage,
-  });
+  SyncService({required this._remoteDataSource, required this._secureStorage});
 
   final SyncRemoteDataSource _remoteDataSource;
   final FlutterSecureStorage _secureStorage;
@@ -75,7 +76,10 @@ class SyncService with WidgetsBindingObserver {
       final user = await _remoteDataSource.refreshCurrentUser();
       if (!session.isCurrent(generation)) return;
       if (user != null && user.id == session.userId) {
-        await _secureStorage.write(key: StorageKeys.currentUser, value: user.username);
+        await _secureStorage.write(
+          key: StorageKeys.currentUser,
+          value: user.username,
+        );
         _userUpdateController.add(user);
       }
 
@@ -121,7 +125,11 @@ class SyncService with WidgetsBindingObserver {
         return p.clamp(0.0, 1.0);
       }
 
-      int parsePositionMs(Map<String, dynamic> item, double progress, int durationSec) {
+      int parsePositionMs(
+        Map<String, dynamic> item,
+        double progress,
+        int durationSec,
+      ) {
         final rawMs = item['positionMs'] ?? item['position_ms'];
         if (rawMs is num && rawMs > 0) return rawMs.toInt();
         if (rawMs is String) {
@@ -129,7 +137,8 @@ class SyncService with WidgetsBindingObserver {
           if (parsed != null && parsed > 0) return parsed;
         }
 
-        final rawSec = item['currentTime'] ??
+        final rawSec =
+            item['currentTime'] ??
             item['current_time'] ??
             item['time'] ??
             item['position'] ??
@@ -173,13 +182,15 @@ class SyncService with WidgetsBindingObserver {
         if (epId.isEmpty || epId.contains('_') || epId.startsWith('ep-')) {
           try {
             final detailRepo = GetIt.I<AnimeDetailRepository>();
-            final res = await detailRepo.getEpisodes(animeId: animeId, season: sNum);
+            final res = await detailRepo.getEpisodes(
+              animeId: animeId,
+              season: sNum,
+            );
             res.fold((_) => null, (eps) {
               for (final ep in eps) {
                 if (ep.seasonNumber == sNum && ep.episodeNumber == epNum) {
                   if (ep.id.isNotEmpty && !ep.id.contains('_')) {
                     epId = ep.id;
-
                   }
                   break;
                 }
@@ -193,7 +204,8 @@ class SyncService with WidgetsBindingObserver {
         final positionMs = parsePositionMs(map, progress, durationSec);
         final currentTimeSec = (positionMs / 1000.0).round();
 
-        final cleanEpId = (epId.isNotEmpty && !epId.contains('_') && !epId.startsWith('ep-'))
+        final cleanEpId =
+            (epId.isNotEmpty && !epId.contains('_') && !epId.startsWith('ep-'))
             ? epId
             : '$epNum';
 
@@ -224,7 +236,11 @@ class SyncService with WidgetsBindingObserver {
           final animeId = item['animeId'] as String? ?? '';
           if (animeId.isEmpty) continue;
           final existing = historyBox.get(animeId);
-          if (existing is Map && mapEquals(Map<String, dynamic>.from(existing), snapshots[animeId])) {
+          if (existing is Map &&
+              mapEquals(
+                Map<String, dynamic>.from(existing),
+                snapshots[animeId],
+              )) {
             final cleaned = Map<String, dynamic>.from(existing);
             cleaned['dirty'] = false;
             cleaned['episodeId'] = item['episodeId'];
@@ -247,12 +263,14 @@ class SyncService with WidgetsBindingObserver {
         if (animeId == null || animeId.isEmpty) continue;
 
         final existing = historyBox.get(animeId);
-        final existingMap =
-            existing is Map ? Map<String, dynamic>.from(existing) : null;
+        final existingMap = existing is Map
+            ? Map<String, dynamic>.from(existing)
+            : null;
 
         final serverUpdated = toEpochMs(sItem['updatedAt']);
-        final localUpdated =
-            existingMap == null ? 0 : toEpochMs(existingMap['updatedAt']);
+        final localUpdated = existingMap == null
+            ? 0
+            : toEpochMs(existingMap['updatedAt']);
 
         // Respect locally removed items (tombstone) unless server has newer data
         if (deletedBox != null) {
@@ -264,13 +282,21 @@ class SyncService with WidgetsBindingObserver {
         }
 
         // Keep newer local data (e.g. watched offline) untouched
-        if (existingMap != null && (existingMap['dirty'] == true || serverUpdated <= localUpdated)) continue;
+        if (existingMap != null &&
+            (existingMap['dirty'] == true || serverUpdated <= localUpdated)) {
+          continue;
+        }
 
         final serverProgress = normalizeProgress(sItem['progress']);
-        final serverDuration = (sItem['duration'] as num?)?.toInt() ??
+        final serverDuration =
+            (sItem['duration'] as num?)?.toInt() ??
             (existingMap?['duration'] as num?)?.toInt() ??
             0;
-        final serverPositionMs = parsePositionMs(sItem, serverProgress, serverDuration);
+        final serverPositionMs = parsePositionMs(
+          sItem,
+          serverProgress,
+          serverDuration,
+        );
         final currentTimeSec = (serverPositionMs / 1000.0).round();
 
         final serverEpId = sItem['episodeId']?.toString() ?? '';
@@ -279,34 +305,46 @@ class SyncService with WidgetsBindingObserver {
         String resolvedEpId = serverEpId;
         bool shouldMarkDirtyToHealServer = false;
 
-        if (resolvedEpId.isEmpty || resolvedEpId.contains('_') || resolvedEpId.startsWith('ep-')) {
-          if (existingEpId.isNotEmpty && !existingEpId.contains('_') && !existingEpId.startsWith('ep-')) {
+        if (resolvedEpId.isEmpty ||
+            resolvedEpId.contains('_') ||
+            resolvedEpId.startsWith('ep-')) {
+          if (existingEpId.isNotEmpty &&
+              !existingEpId.contains('_') &&
+              !existingEpId.startsWith('ep-')) {
             resolvedEpId = existingEpId;
             shouldMarkDirtyToHealServer = true;
           } else {
-            resolvedEpId = (sItem['episodeNumber'] ?? existingMap?['episodeNumber'] ?? 1).toString();
+            resolvedEpId =
+                (sItem['episodeNumber'] ?? existingMap?['episodeNumber'] ?? 1)
+                    .toString();
           }
         }
 
         await historyBox.put(animeId, {
           'animeId': animeId,
-          'animeName': sItem['animeName']?.toString() ??
+          'animeName':
+              sItem['animeName']?.toString() ??
               existingMap?['animeName']?.toString() ??
               'Anime',
-          'poster': sItem['poster']?.toString() ??
+          'poster':
+              sItem['poster']?.toString() ??
               existingMap?['poster']?.toString() ??
               '',
-          'episodeThumb': sItem['episodeThumb']?.toString() ??
+          'episodeThumb':
+              sItem['episodeThumb']?.toString() ??
               existingMap?['episodeThumb']?.toString() ??
               '',
           'episodeId': resolvedEpId,
-          'episodeName': sItem['episodeName']?.toString() ??
+          'episodeName':
+              sItem['episodeName']?.toString() ??
               existingMap?['episodeName']?.toString() ??
               'Bölüm 1',
-          'episodeNumber': (sItem['episodeNumber'] as num?)?.toInt() ??
+          'episodeNumber':
+              (sItem['episodeNumber'] as num?)?.toInt() ??
               (existingMap?['episodeNumber'] as num?)?.toInt() ??
               1,
-          'seasonNumber': (sItem['seasonNumber'] as num?)?.toInt() ??
+          'seasonNumber':
+              (sItem['seasonNumber'] as num?)?.toInt() ??
               (existingMap?['seasonNumber'] as num?)?.toInt() ??
               1,
           'progress': serverProgress,
@@ -338,13 +376,22 @@ class SyncService with WidgetsBindingObserver {
         final val = favoritesBox.get(key);
         if (val is Map) {
           final map = Map<String, dynamic>.from(val);
-          final animeId = map['animeId']?.toString() ?? map['id']?.toString() ?? key.toString();
-          if (animeId.isNotEmpty && (favDeletedBox == null || !favDeletedBox.containsKey(animeId))) {
+          final animeId =
+              map['animeId']?.toString() ??
+              map['id']?.toString() ??
+              key.toString();
+          if (animeId.isNotEmpty &&
+              (favDeletedBox == null || !favDeletedBox.containsKey(animeId))) {
             localFavoritesToUpload.add({
               'id': animeId,
               'name': map['name']?.toString() ?? '',
-              'poster': map['poster']?.toString() ?? map['posterUrl']?.toString() ?? '',
-              'addedAt': map['addedAt'] is num ? map['addedAt'] : DateTime.now().millisecondsSinceEpoch,
+              'poster':
+                  map['poster']?.toString() ??
+                  map['posterUrl']?.toString() ??
+                  '',
+              'addedAt': map['addedAt'] is num
+                  ? map['addedAt']
+                  : DateTime.now().millisecondsSinceEpoch,
             });
           }
         }
@@ -361,7 +408,9 @@ class SyncService with WidgetsBindingObserver {
         if (!session.isCurrent(generation)) return;
         final animeId = item['animeId']?.toString() ?? item['id']?.toString();
         if (animeId != null && animeId.isNotEmpty) {
-          if (favDeletedBox != null && favDeletedBox.containsKey(animeId)) continue;
+          if (favDeletedBox != null && favDeletedBox.containsKey(animeId)) {
+            continue;
+          }
           if (!favoritesBox.containsKey(animeId)) {
             await favoritesBox.put(animeId, item);
           }
@@ -377,56 +426,127 @@ class SyncService with WidgetsBindingObserver {
       final generation = session.generation;
       final favoritesBox = session.box('favorites');
 
+      final pushActive = PushNotificationService.instance.isRegistered;
+      if (!pushActive) {
+        unawaited(PushNotificationService.instance.ensureRegistered());
+      }
+      final autoDownload = AppPreferences.instance.autoDownloadNewEpisodes;
+      final autoDownloadBaselineKey =
+          'auto_download_baseline_${session.userId}';
+      final autoDownloadBaseline =
+          autoDownload && !prefsBox.containsKey(autoDownloadBaselineKey);
+      final autoDownloadedAnimeIds = <String>{};
+
       // 1. Check for new episodes of favorite anime
       if (favoritesBox.isNotEmpty) {
         final latest = await _remoteDataSource.getLatestEpisodes();
         for (final ep in latest) {
           if (!session.isCurrent(generation)) return;
-          final animeId = ep['animeId']?.toString() ?? ep['id']?.toString() ?? '';
-          final animeTitle = ep['animeTitle']?.toString() ?? ep['name']?.toString() ?? '';
-          final episodeNumber = ep['episodeNumber']?.toString() ?? ep['episode']?.toString() ?? '';
-          final seasonNumber = ep['seasonNumber']?.toString() ?? ep['season']?.toString() ?? '1';
+          final animeId =
+              ep['animeId']?.toString() ?? ep['id']?.toString() ?? '';
+          final animeTitle =
+              ep['animeTitle']?.toString() ?? ep['name']?.toString() ?? '';
+          final episodeNumber =
+              ep['episodeNumber']?.toString() ??
+              ep['episode']?.toString() ??
+              '';
+          final seasonNumber =
+              ep['seasonNumber']?.toString() ?? ep['season']?.toString() ?? '1';
           final posterUrl = ep['poster']?.toString() ?? ep['image']?.toString();
 
           if (animeId.isNotEmpty && favoritesBox.containsKey(animeId)) {
-            final notifiedKey = 'notified_ep_${animeId}_s${seasonNumber}_$episodeNumber';
-            if (!prefsBox.containsKey(notifiedKey)) {
-              final notifId = (animeId.hashCode ^ seasonNumber.hashCode ^ episodeNumber.hashCode).abs() % 100000;
+            final season = int.tryParse(seasonNumber) ?? 1;
+            final episode = int.tryParse(episodeNumber) ?? 1;
+            final seenKey = 'seen_ep_${animeId}_s${season}_$episode';
+            final notifiedKey =
+                'notified_ep_${animeId}_s${seasonNumber}_$episodeNumber';
+            final isNew =
+                !prefsBox.containsKey(seenKey) &&
+                !prefsBox.containsKey(notifiedKey);
+            if (!prefsBox.containsKey(seenKey)) {
+              await prefsBox.put(
+                seenKey,
+                DateTime.now().millisecondsSinceEpoch,
+              );
+            }
+
+            if (isNew &&
+                autoDownload &&
+                !autoDownloadBaseline &&
+                autoDownloadedAnimeIds.add(animeId)) {
+              DownloadService.instance.addTask(
+                animeId: animeId,
+                animeTitle: animeTitle,
+                episodeTitle: 'Bölüm $episode',
+                episodeNumber: episode,
+                seasonNumber: season,
+                posterUrl: posterUrl ?? '',
+                downloadUrl: '',
+                quality: AppPreferences.instance.defaultQuality,
+              );
+              debugPrint(
+                '⬇️ Favori Anime Otomatik İndirme: $animeTitle - Sezon $season Bölüm $episode',
+              );
+            }
+
+            if (isNew && !pushActive) {
+              final notifId =
+                  (animeId.hashCode ^
+                          seasonNumber.hashCode ^
+                          episodeNumber.hashCode)
+                      .abs() %
+                  100000;
               await NotificationService.instance.showEpisodeNotification(
                 id: notifId,
                 animeTitle: animeTitle,
                 episodeNumber: episodeNumber,
                 seasonNumber: seasonNumber,
                 animeId: animeId,
-                posterUrl: posterUrl,
               );
-              await prefsBox.put(notifiedKey, DateTime.now().millisecondsSinceEpoch);
-              debugPrint('🔔 Favori Anime Yeni Bölüm: $animeTitle - Sezon $seasonNumber Bölüm $episodeNumber');
+              await prefsBox.put(
+                notifiedKey,
+                DateTime.now().millisecondsSinceEpoch,
+              );
+              debugPrint(
+                '🔔 Favori Anime Yeni Bölüm: $animeTitle - Sezon $seasonNumber Bölüm $episodeNumber',
+              );
             }
           }
         }
       }
 
-      // 2. Check for incoming social notifications
-      if (!session.isCurrent(generation)) return;
-      final notifs = await _remoteDataSource.getNotifications();
-      for (final n in notifs) {
+      if (autoDownloadBaseline) {
+        await prefsBox.put(
+          autoDownloadBaselineKey,
+          DateTime.now().millisecondsSinceEpoch,
+        );
+      }
+
+      // 2. Check for incoming social notifications when FCM is not active
+      if (!pushActive) {
         if (!session.isCurrent(generation)) return;
-        final id = n['id']?.toString() ?? '';
-        final read = n['read'] == true || n['readAt'] != null;
-        if (!read && id.isNotEmpty) {
-          final sKey = 'notified_soc_$id';
-          if (!prefsBox.containsKey(sKey)) {
-            final title = n['title']?.toString() ?? 'Calium';
-            final body = n['body']?.toString() ?? n['message']?.toString() ?? 'Yeni bir bildiriminiz var.';
-            final type = n['type']?.toString() ?? 'general';
-            await NotificationService.instance.showSocialNotification(
-              id: id.hashCode.abs() % 100000,
-              title: title,
-              body: body,
-              payload: 'social:$type',
-            );
-            await prefsBox.put(sKey, DateTime.now().millisecondsSinceEpoch);
+        final notifs = await _remoteDataSource.getNotifications();
+        for (final n in notifs) {
+          if (!session.isCurrent(generation)) return;
+          final id = n['id']?.toString() ?? '';
+          final read = n['read'] == true || n['readAt'] != null;
+          if (!read && id.isNotEmpty) {
+            final sKey = 'notified_soc_$id';
+            if (!prefsBox.containsKey(sKey)) {
+              final title = n['title']?.toString() ?? 'Calium';
+              final body =
+                  n['body']?.toString() ??
+                  n['message']?.toString() ??
+                  'Yeni bir bildiriminiz var.';
+              final type = n['type']?.toString() ?? 'general';
+              await NotificationService.instance.showSocialNotification(
+                id: id.hashCode.abs() % 100000,
+                title: title,
+                body: body,
+                payload: 'social:$type',
+              );
+              await prefsBox.put(sKey, DateTime.now().millisecondsSinceEpoch);
+            }
           }
         }
       }

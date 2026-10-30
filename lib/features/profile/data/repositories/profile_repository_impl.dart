@@ -45,4 +45,22 @@ class ProfileRepositoryImpl implements ProfileRepository {
       return Left(ServerFailure(message: e.toString()));
     }
   }
+
+  @override
+  Future<Either<Failure, ProfileCommentsResult>> getUserComments(
+    String username, {
+    String? cursor,
+  }) async {
+    try {
+      final res = await _remoteDataSource.getUserComments(
+        username,
+        cursor: cursor,
+      );
+      return Right(res);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(message: e.message));
+    } catch (e) {
+      return Left(ServerFailure(message: e.toString()));
+    }
+  }
 }

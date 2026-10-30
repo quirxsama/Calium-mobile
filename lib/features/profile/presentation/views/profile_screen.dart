@@ -76,7 +76,7 @@ class _ProfileView extends StatelessWidget {
           final profile = state.profile;
 
           return DefaultTabController(
-            length: 3,
+            length: 4,
             child: NestedScrollView(
               headerSliverBuilder: (context, innerBoxIsScrolled) {
                 return [
@@ -116,6 +116,7 @@ class _ProfileView extends StatelessWidget {
                             Tab(text: 'Son İzlenenler'),
                             Tab(text: 'Listeler'),
                             Tab(text: 'Hakkında'),
+                            Tab(text: 'Yorumlar'),
                           ],
                         ),
                       ),
@@ -128,6 +129,7 @@ class _ProfileView extends StatelessWidget {
                   _buildHistoryTab(context, profile),
                   _buildListsTab(context, profile),
                   _buildAboutTab(context, profile),
+                  _buildCommentsTab(context, state),
                 ],
               ),
             ),
@@ -498,6 +500,305 @@ class _ProfileView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  static const _monthNames = [
+    'Ocak',
+    'Şubat',
+    'Mart',
+    'Nisan',
+    'Mayıs',
+    'Haziran',
+    'Temmuz',
+    'Ağustos',
+    'Eylül',
+    'Ekim',
+    'Kasım',
+    'Aralık',
+  ];
+
+  String _formatCommentDate(DateTime? date) {
+    if (date == null) return '';
+    final local = date.toLocal();
+    return '${local.day} ${_monthNames[local.month - 1]} ${local.year}';
+  }
+
+  Widget _buildCommentsTab(BuildContext context, ProfileLoaded loaded) {
+    final profile = loaded.profile;
+
+    if (!profile.commentsVisible) {
+      return _buildCommentsMessage(
+        icon: Icons.lock_outline_rounded,
+        title: 'Bu kullanıcı yorumlarını gizlemiş.',
+        description: profile.isOwner
+            ? 'Yorumların şu anda gizli. Ayarlar > Gizlilik bölümünden açabilirsin.'
+            : null,
+        actionLabel: profile.isOwner ? 'Gizlilik Ayarları' : null,
+        onAction: profile.isOwner ? () => context.push('/settings') : null,
+      );
+    }
+
+    if (profile.comments.isEmpty && loaded.commentsError != null) {
+      return _buildCommentsMessage(
+        icon: Icons.cloud_off_rounded,
+        title: 'Yorumlar yüklenemedi.',
+        description: loaded.commentsError,
+        actionLabel: 'Tekrar Dene',
+        onAction: () => context.read<ProfileCubit>().loadProfile(
+              username: profile.username.isEmpty ? null : profile.username,
+            ),
+      );
+    }
+
+    if (profile.comments.isEmpty) {
+      return _buildCommentsMessage(
+        icon: Icons.chat_bubble_outline_rounded,
+        title: 'Henüz yorum yapılmamış.',
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ...profile.comments.map(
+            (comment) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildCommentCard(context, comment),
+            ),
+          ),
+          if (loaded.commentsError != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                loaded.commentsError!,
+                style: const TextStyle(
+                  color: AppColors.accentCrimson,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          if (loaded.hasMoreComments)
+            SizedBox(
+              height: 44,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.border),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: loaded.isLoadingMoreComments
+                    ? null
+                    : () => context.read<ProfileCubit>().loadMoreComments(),
+                child: loaded.isLoadingMoreComments
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : const Text(
+                        'Daha fazla yorum',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+              ),
+            ),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentsMessage({
+    required IconData icon,
+    required String title,
+    String? description,
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: GlassContainer(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: AppColors.textMuted, size: 48),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (description != null && description.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                description,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ],
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 16),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: onAction,
+                child: Text(
+                  actionLabel,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommentCard(BuildContext context, ProfileCommentEntity comment) {
+    final isEpisode = comment.isEpisodeComment;
+    final dateLabel = _formatCommentDate(comment.createdAt);
+    final authorName = comment.authorDisplayName?.isNotEmpty == true
+        ? comment.authorDisplayName!
+        : (comment.authorUsername?.isNotEmpty == true
+            ? comment.authorUsername!
+            : 'Kullanıcı');
+    final initial = authorName.isNotEmpty ? authorName[0].toUpperCase() : 'U';
+
+    return GlassContainer(
+      padding: const EdgeInsets.all(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusLg),
+        onTap: comment.animeId.isEmpty
+            ? null
+            : () => context.push('/anime/${comment.animeId}'),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ClipOval(
+                  child: AppCachedImage(
+                    imageUrl: comment.authorAvatarUrl,
+                    width: 32,
+                    height: 32,
+                    fit: BoxFit.cover,
+                    errorWidget: Container(
+                      width: 32,
+                      height: 32,
+                      color: AppColors.surfaceElevated,
+                      alignment: Alignment.center,
+                      child: Text(
+                        initial,
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    authorName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (dateLabel.isNotEmpty)
+                  Text(
+                    dateLabel,
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: isEpisode
+                    ? AppColors.primary.withAlpha(30)
+                    : AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                isEpisode ? 'Bölüm yorumu' : 'Seri yorumu',
+                style: TextStyle(
+                  color:
+                      isEpisode ? AppColors.primary : AppColors.textSecondary,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              comment.body.isEmpty ? '—' : comment.body,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                height: 1.4,
+              ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            const Row(
+              children: [
+                Icon(
+                  Icons.play_circle_outline_rounded,
+                  color: AppColors.primary,
+                  size: 16,
+                ),
+                SizedBox(width: 6),
+                Text(
+                  'Animeyi Görüntüle',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Spacer(),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: Colors.white38,
+                  size: 12,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 

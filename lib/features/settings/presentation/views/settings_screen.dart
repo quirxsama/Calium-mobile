@@ -33,6 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _newPassController = TextEditingController();
 
   bool _isPrivate = false;
+  bool _commentsPublic = true;
 
   String _defaultQuality = AppPreferences.instance.defaultQuality;
   String _defaultAudio = AppPreferences.instance.defaultAudio;
@@ -41,6 +42,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _gestureVolume = AppPreferences.instance.gestureVolume;
   bool _autoNext = AppPreferences.instance.autoNext;
   bool _autoSkipIntro = AppPreferences.instance.autoSkipIntro;
+  bool _autoDownloadNewEpisodes =
+      AppPreferences.instance.autoDownloadNewEpisodes;
   bool _isConnectingIntegration = false;
 
   static const _qualityLabels = {
@@ -65,23 +68,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final ok = await TrackingService.instance.linkProvider(
         provider: provider,
-        onOpenUrl: (url) => launchUrl(
-          Uri.parse(url),
-          mode: LaunchMode.externalApplication,
-        ),
+        onOpenUrl: (url) =>
+            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
       );
       if (!mounted) return;
       if (ok) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${provider.toUpperCase()} hesabı başarıyla bağlandı!'),
+            content: Text(
+              '${provider.toUpperCase()} hesabı başarıyla bağlandı!',
+            ),
             backgroundColor: AppColors.successGreen,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${provider.toUpperCase()} bağlantısı kurulamadı veya iptal edildi.'),
+            content: Text(
+              '${provider.toUpperCase()} bağlantısı kurulamadı veya iptal edildi.',
+            ),
             backgroundColor: AppColors.accentCrimson,
           ),
         );
@@ -109,6 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _avatarController.text = authState.user.avatarUrl ?? '';
       _previewAvatarUrl = authState.user.avatarUrl ?? '';
       _isPrivate = authState.user.isPrivate;
+      _commentsPublic = authState.user.commentsPublic;
       _initialized = true;
     }
   }
@@ -385,6 +391,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
+          const Divider(color: AppColors.border, height: 32),
+
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Yorumlar profilimde görünsün',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            subtitle: const Text(
+              'Kapatırsanız seri ve bölüm yorumlarınız profilinizde yalnızca size görünür.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+            value: _commentsPublic,
+            activeThumbColor: AppColors.primary,
+            onChanged: (val) {
+              setState(() => _commentsPublic = val);
+              context.read<SettingsBloc>().add(
+                UpdateProfileRequested(commentsPublic: val),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -549,6 +579,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
               AppPreferences.instance.setAutoSkipIntro(val);
             },
           ),
+          const Divider(color: AppColors.border, height: 32),
+
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text(
+              'Yeni Bölümleri Otomatik İndir',
+              style: TextStyle(color: Colors.white),
+            ),
+            subtitle: const Text(
+              'Favori animelerinize yeni bölüm eklendiğinde varsayılan kalitede otomatik indirilir.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
+            value: _autoDownloadNewEpisodes,
+            activeThumbColor: AppColors.primary,
+            onChanged: (val) {
+              setState(() => _autoDownloadNewEpisodes = val);
+              AppPreferences.instance.setAutoDownloadNewEpisodes(val);
+            },
+          ),
         ],
       ),
     );
@@ -660,7 +709,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(AppSpacing.borderRadiusMd),
+                  borderRadius: BorderRadius.circular(
+                    AppSpacing.borderRadiusMd,
+                  ),
                   border: Border.all(color: AppColors.border, width: 0.8),
                 ),
                 child: Row(
@@ -708,18 +759,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(Icons.sync_rounded, size: 18),
                   label: Text(
-                    tracking.isSyncing ? 'Senkronize Ediliyor...' : 'Tümünü Şimdi Senkronize Et',
+                    tracking.isSyncing
+                        ? 'Senkronize Ediliyor...'
+                        : 'Tümünü Şimdi Senkronize Et',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
               ),
@@ -728,19 +786,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (tracking.conflicts.isNotEmpty) ...[
                 Text(
                   'Çözülmesi Gereken Çakışmalar (${tracking.conflicts.length})',
-                  style: AppTypography.titleMedium.copyWith(color: AppColors.ratingAmber),
+                  style: AppTypography.titleMedium.copyWith(
+                    color: AppColors.ratingAmber,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 ...tracking.conflicts.map((conflict) {
                   final entryId = conflict['entryId']?.toString() ?? '';
                   final provider = conflict['provider']?.toString() ?? '';
                   final version = (conflict['version'] as num?)?.toInt() ?? 0;
-                  final fields = (conflict['fields'] as List?)?.join(', ') ?? '';
+                  final fields =
+                      (conflict['fields'] as List?)?.join(', ') ?? '';
                   final localEntry = tracking.entries.firstWhere(
                     (e) => e['id'] == entryId,
                     orElse: () => {},
                   );
-                  final title = localEntry['title']?.toString() ?? 'Anime ($entryId)';
+                  final title =
+                      localEntry['title']?.toString() ?? 'Anime ($entryId)';
 
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -748,14 +810,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     decoration: BoxDecoration(
                       color: AppColors.surfaceElevated,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.ratingAmber.withAlpha(120)),
+                      border: Border.all(
+                        color: AppColors.ratingAmber.withAlpha(120),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 4),
-                        Text('Farklı alanlar: $fields ($provider)', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        Text(
+                          'Farklı alanlar: $fields ($provider)',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
                         const SizedBox(height: 10),
                         Row(
                           children: [
@@ -765,10 +841,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   entryId: entryId,
                                   provider: provider,
                                   version: version,
-                                  entryVersion: (localEntry['version'] as num?)?.toInt() ?? 1,
+                                  entryVersion:
+                                      (localEntry['version'] as num?)
+                                          ?.toInt() ??
+                                      1,
                                   choice: 'local',
                                 ),
-                                child: const Text('Calium Değerini Tut', style: TextStyle(fontSize: 12)),
+                                child: const Text(
+                                  'Calium Değerini Tut',
+                                  style: TextStyle(fontSize: 12),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -778,11 +860,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   entryId: entryId,
                                   provider: provider,
                                   version: version,
-                                  entryVersion: (localEntry['version'] as num?)?.toInt() ?? 1,
+                                  entryVersion:
+                                      (localEntry['version'] as num?)
+                                          ?.toInt() ??
+                                      1,
                                   choice: 'remote',
                                 ),
-                                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                                child: Text('${provider.toUpperCase()} Verisini Al', style: const TextStyle(fontSize: 12, color: Colors.white)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                ),
+                                child: Text(
+                                  '${provider.toUpperCase()} Verisini Al',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -887,7 +980,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ? 'Bağlantı Aktif${username != null && username.isNotEmpty ? ' (@$username)' : ''}'
                           : 'Bağlı Değil',
                       style: TextStyle(
-                        color: isConnected ? AppColors.successGreen : AppColors.textMuted,
+                        color: isConnected
+                            ? AppColors.successGreen
+                            : AppColors.textMuted,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
@@ -897,7 +992,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               if (isConnected)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.successGreen.withAlpha(35),
                     borderRadius: BorderRadius.circular(8),
@@ -905,11 +1003,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.check_circle_rounded, color: AppColors.successGreen, size: 14),
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: AppColors.successGreen,
+                        size: 14,
+                      ),
                       SizedBox(width: 4),
                       Text(
                         'Bağlandı',
-                        style: TextStyle(color: AppColors.successGreen, fontSize: 11, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: AppColors.successGreen,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -923,20 +1029,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(
                   'Son Senkronizasyon: ${lastSyncedAt.toLocal().toString().split('.')[0]}',
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
                 ),
               ),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                icon: const Icon(Icons.link_off_rounded, color: AppColors.accentCrimson, size: 18),
+                icon: const Icon(
+                  Icons.link_off_rounded,
+                  color: AppColors.accentCrimson,
+                  size: 18,
+                ),
                 label: Text(
                   '$name Bağlantısını Kes',
                   style: const TextStyle(color: AppColors.accentCrimson),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: AppColors.accentCrimson.withAlpha(120)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  side: BorderSide(
+                    color: AppColors.accentCrimson.withAlpha(120),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
                 onPressed: _isConnectingIntegration ? null : onDisconnect,
               ),
@@ -944,14 +1061,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ] else ...[
             Text(
               'İzleme listenizi ve bölüm geçmişinizi $name ile çift taraflı senkronize edin.',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12.5,
+              ),
             ),
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 icon: _isConnectingIntegration
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Icon(Icons.login_rounded, size: 18),
                 label: Text(
                   '$name ile Bağlan',
@@ -960,7 +1087,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: badgeColor,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
                 onPressed: _isConnectingIntegration ? null : onConnect,
               ),
@@ -1055,7 +1184,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'v1.1.2 (Beta) • Libmpv Video Engine',
+                        'v1.3.0 • Libmpv Video Engine',
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12,

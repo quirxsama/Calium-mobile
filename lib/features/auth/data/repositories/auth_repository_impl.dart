@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:calium_stream/core/constants/storage_keys.dart';
 import 'package:calium_stream/core/error/exceptions.dart';
 import 'package:calium_stream/core/error/failures.dart';
+import 'package:calium_stream/core/services/push_notification_service.dart';
 import 'package:calium_stream/features/auth/data/datasources/auth_remote_datasource.dart';
 import 'package:calium_stream/features/auth/domain/entities/user_entity.dart';
 import 'package:calium_stream/features/auth/domain/repositories/auth_repository.dart';
@@ -30,19 +31,22 @@ class AuthRepositoryImpl implements AuthRepository {
         email: email,
         password: password,
       );
-      if (generation != sessionState.generation) throw StateError('Account changed');
-      if (token.isEmpty) throw StateError('Missing session token');
+      if (generation != sessionState.generation) {
+        throw StateError('Account changed');
+      }
+      if (token.isEmpty) {
+        throw StateError('Missing session token');
+      }
       if (token.isNotEmpty) {
-        await _secureStorage.write(
-          key: StorageKeys.authToken,
-          value: token,
-        );
+        await _secureStorage.write(key: StorageKeys.authToken, value: token);
       }
       await _secureStorage.write(
         key: StorageKeys.currentUser,
         value: user.username,
       );
-      if (!await sessionState.activate(user.id, generation)) throw StateError('Account changed');
+      if (!await sessionState.activate(user.id, generation)) {
+        throw StateError('Account changed');
+      }
       return Right(user);
     } on ServerException catch (e) {
       await sessionState.activate(null, generation);
@@ -70,19 +74,22 @@ class AuthRepositoryImpl implements AuthRepository {
         username: username,
         password: password,
       );
-      if (generation != sessionState.generation) throw StateError('Account changed');
-      if (token.isEmpty) throw StateError('Missing session token');
+      if (generation != sessionState.generation) {
+        throw StateError('Account changed');
+      }
+      if (token.isEmpty) {
+        throw StateError('Missing session token');
+      }
       if (token.isNotEmpty) {
-        await _secureStorage.write(
-          key: StorageKeys.authToken,
-          value: token,
-        );
+        await _secureStorage.write(key: StorageKeys.authToken, value: token);
       }
       await _secureStorage.write(
         key: StorageKeys.currentUser,
         value: user.username,
       );
-      if (!await sessionState.activate(user.id, generation)) throw StateError('Account changed');
+      if (!await sessionState.activate(user.id, generation)) {
+        throw StateError('Account changed');
+      }
       return Right(user);
     } on ServerException catch (e) {
       await sessionState.activate(null, generation);
@@ -106,12 +113,16 @@ class AuthRepositoryImpl implements AuthRepository {
         return const Left(AuthFailure(message: 'Oturum bulunamadı'));
       }
       final user = await _remoteDataSource.getCurrentUser();
-      if (generation != sessionState.generation) throw StateError('Account changed');
+      if (generation != sessionState.generation) {
+        throw StateError('Account changed');
+      }
       await _secureStorage.write(
         key: StorageKeys.currentUser,
         value: user.username,
       );
-      if (!await sessionState.activate(user.id, generation)) throw StateError('Account changed');
+      if (!await sessionState.activate(user.id, generation)) {
+        throw StateError('Account changed');
+      }
       return Right(user);
     } on ServerException catch (e) {
       await sessionState.activate(null, generation);
@@ -127,6 +138,7 @@ class AuthRepositoryImpl implements AuthRepository {
 
   @override
   Future<Either<Failure, void>> logout() async {
+    await PushNotificationService.instance.unregister();
     final session = AccountSession.instance;
     final generation = session.invalidate();
     try {
@@ -158,19 +170,22 @@ class AuthRepositoryImpl implements AuthRepository {
         transactionId: session.transactionId,
         verifier: session.verifier,
       );
-      if (generation != sessionState.generation) throw StateError('Account changed');
-      if (token.isEmpty) throw StateError('Missing session token');
+      if (generation != sessionState.generation) {
+        throw StateError('Account changed');
+      }
+      if (token.isEmpty) {
+        throw StateError('Missing session token');
+      }
       if (token.isNotEmpty) {
-        await _secureStorage.write(
-          key: StorageKeys.authToken,
-          value: token,
-        );
+        await _secureStorage.write(key: StorageKeys.authToken, value: token);
       }
       await _secureStorage.write(
         key: StorageKeys.currentUser,
         value: user.username,
       );
-      if (!await sessionState.activate(user.id, generation)) throw StateError('Account changed');
+      if (!await sessionState.activate(user.id, generation)) {
+        throw StateError('Account changed');
+      }
       return Right(user);
     } on ServerException catch (e) {
       await sessionState.activate(null, generation);

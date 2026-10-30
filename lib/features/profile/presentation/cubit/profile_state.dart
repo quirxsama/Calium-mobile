@@ -13,15 +13,44 @@ final class ProfileInitial extends ProfileState {}
 final class ProfileLoading extends ProfileState {}
 
 final class ProfileLoaded extends ProfileState {
-  const ProfileLoaded({required this.profile});
-  final UserProfileEntity profile;
+  const ProfileLoaded({
+    required this.profile,
+    this.nextCursor,
+    this.isLoadingMoreComments = false,
+    this.commentsError,
+  });
 
-  ProfileLoaded copyWith({UserProfileEntity? profile}) {
-    return ProfileLoaded(profile: profile ?? this.profile);
+  final UserProfileEntity profile;
+  final String? nextCursor;
+  final bool isLoadingMoreComments;
+  final String? commentsError;
+
+  bool get hasMoreComments => nextCursor != null && nextCursor!.isNotEmpty;
+
+  ProfileLoaded copyWith({
+    UserProfileEntity? profile,
+    String? nextCursor,
+    bool clearNextCursor = false,
+    bool? isLoadingMoreComments,
+    String? commentsError,
+    bool clearCommentsError = false,
+  }) {
+    return ProfileLoaded(
+      profile: profile ?? this.profile,
+      nextCursor: clearNextCursor ? null : (nextCursor ?? this.nextCursor),
+      isLoadingMoreComments: isLoadingMoreComments ?? this.isLoadingMoreComments,
+      commentsError:
+          clearCommentsError ? null : (commentsError ?? this.commentsError),
+    );
   }
 
   @override
-  List<Object?> get props => [profile];
+  List<Object?> get props => [
+        profile,
+        nextCursor,
+        isLoadingMoreComments,
+        commentsError,
+      ];
 }
 
 final class ProfileError extends ProfileState {

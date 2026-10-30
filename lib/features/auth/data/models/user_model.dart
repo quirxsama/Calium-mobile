@@ -10,6 +10,7 @@ class UserModel extends UserEntity {
     super.bio,
     super.role = 'user',
     super.isPrivate = false,
+    super.commentsPublic = true,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -22,6 +23,7 @@ class UserModel extends UserEntity {
       bio: json['bio'] as String?,
       role: json['role'] as String? ?? 'user',
       isPrivate: json['isPrivate'] as bool? ?? false,
+      commentsPublic: json['commentsPublic'] as bool? ?? true,
     );
   }
 
@@ -35,6 +37,7 @@ class UserModel extends UserEntity {
       'bio': bio,
       'role': role,
       'isPrivate': isPrivate,
+      'commentsPublic': commentsPublic,
     };
   }
 }

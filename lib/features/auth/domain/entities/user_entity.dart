@@ -10,6 +10,7 @@ class UserEntity extends Equatable {
     this.bio,
     this.role = 'user',
     this.isPrivate = false,
+    this.commentsPublic = true,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class UserEntity extends Equatable {
   final String? bio;
   final String role;
   final bool isPrivate;
+  final bool commentsPublic;
 
   @override
   List<Object?> get props => [
@@ -31,5 +33,6 @@ class UserEntity extends Equatable {
         bio,
         role,
         isPrivate,
+        commentsPublic,
       ];
 }

@@ -10,6 +10,7 @@ abstract class SettingsRemoteDataSource {
     String? avatarUrl,
     bool? isPrivate,
     bool? dndEnabled,
+    bool? commentsPublic,
   });
 
   Future<void> changePassword({
@@ -30,6 +31,7 @@ class SettingsRemoteDataSourceImpl implements SettingsRemoteDataSource {
     String? avatarUrl,
     bool? isPrivate,
     bool? dndEnabled,
+    bool? commentsPublic,
   }) async {
     try {
       final payload = <String, dynamic>{};
@@ -38,6 +40,7 @@ class SettingsRemoteDataSourceImpl implements SettingsRemoteDataSource {
       if (avatarUrl != null) payload['avatarUrl'] = avatarUrl;
       if (isPrivate != null) payload['isPrivate'] = isPrivate;
       if (dndEnabled != null) payload['dndEnabled'] = dndEnabled;
+      if (commentsPublic != null) payload['commentsPublic'] = commentsPublic;
 
       final response = await _dioClient.patch(
         '/api/account',
