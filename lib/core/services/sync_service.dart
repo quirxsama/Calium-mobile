@@ -23,6 +23,7 @@ class SyncService with WidgetsBindingObserver {
   final FlutterSecureStorage _secureStorage;
 
   Timer? _periodicTimer;
+  Timer? _sessionSyncTimer;
   bool _isSyncing = false;
 
   // Stream for live sync status and user updates
@@ -34,6 +35,7 @@ class SyncService with WidgetsBindingObserver {
 
   void start() {
     WidgetsBinding.instance.addObserver(this);
+    AccountSession.instance.addListener(_onAccountSessionChanged);
     _periodicTimer?.cancel();
     // Run full sync every 45 seconds
     _periodicTimer = Timer.periodic(const Duration(seconds: 45), (_) {
@@ -48,7 +50,19 @@ class SyncService with WidgetsBindingObserver {
 
   void stop() {
     WidgetsBinding.instance.removeObserver(this);
+    AccountSession.instance.removeListener(_onAccountSessionChanged);
     _periodicTimer?.cancel();
+    _sessionSyncTimer?.cancel();
+  }
+
+  /// A cold start begins on the guest session, so the first sync attempts bail
+  /// out (no user yet). As soon as the stored session is restored, sync
+  /// immediately instead of waiting for the next periodic tick.
+  void _onAccountSessionChanged() {
+    final session = AccountSession.instance;
+    if (!session.ready || session.userId == null) return;
+    _sessionSyncTimer?.cancel();
+    _sessionSyncTimer = Timer(const Duration(milliseconds: 250), syncNow);
   }
 
   @override

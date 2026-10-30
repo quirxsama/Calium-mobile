@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:calium_stream/core/services/account_session.dart';
+import 'package:calium_stream/core/services/tracking_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 
 import 'package:calium_stream/app/router.dart';
+import 'package:calium_stream/app/session_data_refresher.dart';
 import 'package:calium_stream/core/theme/app_theme.dart';
 import 'package:calium_stream/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:calium_stream/features/calendar/presentation/bloc/calendar_bloc.dart';
@@ -44,11 +48,21 @@ class CaliumApp extends StatelessWidget {
         ),
         BlocProvider<SettingsBloc>(create: (_) => GetIt.I<SettingsBloc>()),
       ],
-      child: MaterialApp.router(
-        title: 'Calium',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme(),
-        routerConfig: AppRouter.router,
+      child: Builder(
+        builder: (innerContext) => SessionDataRefresher(
+          onSessionChanged: (userId) {
+            innerContext.read<LibraryBloc>().add(LoadLibraryRequested());
+            if (userId != null) {
+              unawaited(TrackingService.instance.refreshEntries());
+            }
+          },
+          child: MaterialApp.router(
+            title: 'Calium',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.darkTheme(),
+            routerConfig: AppRouter.router,
+          ),
+        ),
       ),
     ));
   }

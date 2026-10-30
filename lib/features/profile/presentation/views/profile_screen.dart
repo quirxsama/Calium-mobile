@@ -10,6 +10,7 @@ import 'package:calium_stream/core/widgets/app_cached_image.dart';
 import 'package:calium_stream/core/widgets/glass_container.dart';
 import 'package:calium_stream/core/utils/episode_utils.dart';
 import 'package:calium_stream/core/utils/navigation_utils.dart';
+import 'package:calium_stream/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:calium_stream/features/profile/domain/entities/user_profile_entity.dart';
 import 'package:calium_stream/features/profile/domain/repositories/profile_repository.dart';
 import 'package:calium_stream/features/profile/presentation/cubit/profile_cubit.dart';
@@ -29,9 +30,25 @@ class ProfileScreen extends StatelessWidget {
       create: (context) => ProfileCubit(
         repository: GetIt.I<ProfileRepository>(),
       )..loadProfile(username: username),
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        body: const _ProfileView(),
+      // The first request can leave while the stored token is still being
+      // restored; it then arrives unauthenticated and the server hides the
+      // owner-only bits such as "Son İzlenenler". Reload once the session is
+      // back.
+      child: BlocListener<AuthBloc, AuthState>(
+        listenWhen: (previous, current) =>
+            current is Authenticated && previous is! Authenticated,
+        listener: (context, state) {
+          final auth = state as Authenticated;
+          final ownProfile = username == null || username == auth.user.username;
+          if (!ownProfile) return;
+          final loaded = context.read<ProfileCubit>().state;
+          if (loaded is ProfileLoaded && loaded.profile.isOwner) return;
+          context.read<ProfileCubit>().loadProfile(username: username);
+        },
+        child: Scaffold(
+          backgroundColor: AppColors.background,
+          body: const _ProfileView(),
+        ),
       ),
     );
   }

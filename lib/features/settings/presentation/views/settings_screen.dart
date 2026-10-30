@@ -1184,7 +1184,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(height: 4),
                       const Text(
-                        'v1.3.0 • Libmpv Video Engine',
+                        'v1.3.1 • Libmpv Video Engine',
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 12,
